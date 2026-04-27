@@ -1,0 +1,17 @@
+# Simulation artifacts
+sim/build/
+sim/*.vcd
+sim/*.fst
+sim/*.log
+
+# Generated program files
+programs/hex/*.bin
+programs/hex/*.elf
+
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+
