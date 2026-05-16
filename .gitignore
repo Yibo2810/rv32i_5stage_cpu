@@ -9,9 +9,9 @@ programs/hex/*.bin
 programs/hex/*.elf
 
 # Editor and OS files
+.DS_Store
 .vscode/
 .idea/
 *.swp
 Thumbs.db
 Desktop.ini
-
