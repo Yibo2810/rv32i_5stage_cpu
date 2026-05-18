@@ -54,7 +54,7 @@ module control_unit(
             `RV32I_OPCODE_BRANCH : begin
                 branch  = 1'b1;
                 imm_sel = `RV32I_IMM_B;
-                alu_op  = `RV32I_ALU_OP_BRANCH;
+                alu_op  = ALU_OP_BRANCH;
             end
 
             `RV32I_OPCODE_LOAD : begin
@@ -63,7 +63,7 @@ module control_unit(
                 alu_src   = 1'b1;
                 wb_sel    = `RV32I_WB_MEM;
                 imm_sel   = `RV32I_IMM_I;
-                alu_op    = `RV32I_ALU_OP_ADD;
+                alu_op    = ALU_OP_ADD;
             end
 
             `RV32I_OPCODE_STORE : begin

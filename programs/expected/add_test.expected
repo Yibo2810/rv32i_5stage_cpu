@@ -1,2 +1,1 @@
-# TODO: Expected results for add_test.
-
+  expected: dmem[0] = 12
