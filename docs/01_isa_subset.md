@@ -1,26 +1,42 @@
 # ISA Subset
 
-This document tracks the first RV32I subset targeted by the single-cycle CPU milestone.
+This document tracks the RV32I subset currently implemented and verified by the
+single-cycle CPU milestone.
 
-The status below means "RTL datapath/control path exists locally" rather than "fully verified". Functional verification is still pending until the ideal memory and self-checking testbench are added.
+## v0.1 Verified Single-Cycle Subset
 
-## Initial Single-Cycle Subset
+The status below means the instruction has an RTL path and is covered by the
+current directed self-checking single-cycle tests.
 
-| Instruction | Type | RTL status | Main datapath effect |
+| Instruction | Type | v0.1 status | Main datapath effect |
 |---|---|---|---|
-| `add` | R | Implemented, TB pending | `rd = rs1 + rs2` |
-| `sub` | R | Implemented, TB pending | `rd = rs1 - rs2` |
-| `addi` | I | Implemented, TB pending | `rd = rs1 + imm_i` |
-| `lw` | I | Implemented, ideal memory/TB pending | `rd = data_memory[rs1 + imm_i]` |
-| `sw` | S | Implemented, ideal memory/TB pending | `data_memory[rs1 + imm_s] = rs2` |
-| `beq` | B | Implemented, TB pending | `if (rs1 == rs2) pc = pc + imm_b` |
+| `add` | R | Verified by `add_test` | `rd = rs1 + rs2` |
+| `sub` | R | Verified by `sub_test` | `rd = rs1 - rs2` |
+| `addi` | I | Verified through all current programs | `rd = rs1 + imm_i` |
+| `lw` | I | Verified by `load_store_test` | `rd = data_memory[rs1 + imm_i]` |
+| `sw` | S | Verified by all current signature tests | `data_memory[rs1 + imm_s] = rs2` |
+| `beq` | B | Verified by `branch_test` | `if (rs1 == rs2) pc = pc + imm_b` |
 
-## Not In The First Milestone
+## Current Test Signatures
 
-The following RV32I groups are intentionally deferred until the first single-cycle subset is runnable and tested:
+| Test | Main instructions exercised | Expected signature |
+|---|---|---|
+| `add_test` | `addi`, `add`, `sw` | `dmem[0] = 12` |
+| `sub_test` | `addi`, `sub`, `sw` | `dmem[0] = 5` |
+| `load_store_test` | `addi`, `sw`, `lw` | `dmem[1] = 42` |
+| `branch_test` | `addi`, `beq`, `sw` | `dmem[0] = 1` |
+
+## Not In The v0.1 Milestone
+
+The following RV32I groups are intentionally deferred:
 
 - Other R/I-type logic instructions such as `and`, `or`, `xor`, `slt`, and their immediate forms.
-- Other branches such as `bne`, `blt`, and `bge`.
+- Shift instructions such as `sll`, `srl`, `sra`, `slli`, `srli`, and `srai`.
+- Other branches such as `bne`, `blt`, `bge`, `bltu`, and `bgeu`.
 - Jumps such as `jal` and `jalr`.
 - Upper-immediate instructions such as `lui` and `auipc`.
 - Byte/halfword loads and stores.
+- CSR, trap, interrupt, and privileged behavior.
+
+These will be added in later single-cycle expansion phases before the project
+moves into the five-stage pipeline.

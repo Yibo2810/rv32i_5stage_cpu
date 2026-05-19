@@ -1,6 +1,9 @@
 # Single-Cycle Design
 
-This document describes the current first-pass single-cycle datapath. The RTL structure is mostly connected, but this is still an uncompiled/unverified checkpoint until the ideal memory and testbench are written.
+This document describes the v0.1 single-cycle datapath. The RTL is connected
+to ideal instruction/data memory models and is verified for the initial
+`add`, `sub`, `addi`, `lw`, `sw`, and `beq` subset with directed
+self-checking tests.
 
 ## Datapath Sketch
 
@@ -51,7 +54,9 @@ The single-cycle core does not contain instruction memory or data memory interna
 | `dmem_wdata` | output | Store data, currently driven by `rs2_data` |
 | `dmem_rdata` | input | Load data returned by the external data memory |
 
-This boundary is the reason the next task is an ideal memory or testbench wrapper: the core can generate addresses and memory control signals, but a simulation environment must still provide instruction words and load data.
+The core intentionally keeps instruction and data memories outside the CPU
+module. In v0.1, the testbench provides ideal memory models under `tb/models/`
+so the core can be exercised with generated hex programs.
 
 ## Main Equations
 
@@ -77,4 +82,6 @@ rd_data       = wb_sel ? dmem_rdata : alu_result;
 - Load data is expected to be available in the same cycle for the single-cycle model.
 - Branch target selection happens inside the same cycle using the ALU `zero` result.
 
-These assumptions are acceptable for a first single-cycle learning milestone. They will need to become more explicit before moving into a pipelined or realistic memory-interface version.
+These assumptions are acceptable for the v0.1 single-cycle learning milestone.
+They will need to become more explicit before moving into a pipelined or
+realistic memory-interface version.
