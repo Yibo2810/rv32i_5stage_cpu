@@ -4,6 +4,13 @@ module tb_single_cycle;
   reg clk;
   reg rst;
 
+  integer max_cycles;
+  integer expect_addr;
+  reg [31:0] expect_value;
+  reg [31:0] actual_value;
+  reg [1023:0] test_name;
+  reg [1023:0] vcd_file;
+
   wire [31:0] imem_addr;
   wire [31:0] imem_rdata;
 
@@ -17,17 +24,46 @@ module tb_single_cycle;
     clk = 0;
     rst = 1;
 
-  always #5 clk = ~clk;
+    if (!$value$plusargs("TEST=%s", test_name)) begin
+      test_name = "single_cycle";
+    end
+
+    if (!$value$plusargs("EXPECT_ADDR=%d", expect_addr)) begin
+      $display("ERROR: missing +EXPECT_ADDR=<data memory word index>");
+      $fatal(1);
+    end
+
+    if (!$value$plusargs("EXPECT_VALUE=%h", expect_value)) begin
+      $display("ERROR: missing +EXPECT_VALUE=<32-bit hex value>");
+      $fatal(1);
+    end
+
+    if (!$value$plusargs("MAX_CYCLES=%d", max_cycles)) begin
+      max_cycles = 20;
+    end
+
+    if (!$value$plusargs("VCD=%s", vcd_file)) begin
+      vcd_file = "sim/single_cycle.vcd";
+    end
+
+    if (expect_addr < 0 || expect_addr > 255) begin
+      $display("ERROR: EXPECT_ADDR=%0d is outside dmem[0:255]", expect_addr);
+      $fatal(1);
+    end
+
     // dump wave
-    $dumpfile("sim/single_cycle.vcd");
+    $dumpfile(vcd_file);
     $dumpvars(0, tb_single_cycle);
+
+    $display("RUN: %0s", test_name);
+    $display("EXPECT: dmem[%0d] = %08h", expect_addr, expect_value);
 
     // reset
     repeat (2) @(posedge clk);
     rst = 0;
 
     // run fixed cycles and print useful trace
-    repeat (20) begin
+    repeat (max_cycles) begin
       @(posedge clk);
       #1;
       $display("pc=%h instr=%h dmem_we=%b dmem_addr=%h dmem_wdata=%h",
@@ -35,15 +71,18 @@ module tb_single_cycle;
     end
 
     // check final signature
-    if (u_dmem.dmem[0] !== 32'h0000000c) begin
-      $display("FAIL: expected dmem[0]=0000000c, got %h", u_dmem.dmem[0]);
-      $finish;
+    actual_value = u_dmem.dmem[expect_addr];
+    if (actual_value !== expect_value) begin
+      $display("FAIL: %0s expected dmem[%0d]=%08h, got %08h",
+               test_name, expect_addr, expect_value, actual_value);
+      $fatal(1);
     end
 
-    $display("PASS");
+    $display("PASS: %0s", test_name);
     $finish;
 end
 
+  always #5 clk = ~clk;
 
   core_single_cycle u_core(
     .clk(clk),
@@ -72,4 +111,3 @@ end
       .dmem_rdata(dmem_rdata)
   );
 endmodule
-

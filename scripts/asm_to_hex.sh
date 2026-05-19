@@ -24,7 +24,7 @@ find_riscv_tool() {
         return
     fi
 
-    for prefix in riscv64-unknown-elf- riscv32-unknown-elf-; do
+    for prefix in riscv64-unknown-elf- riscv32-unknown-elf- riscv64-elf- riscv32-elf-; do
         if command -v "${prefix}${tool_name}" >/dev/null 2>&1; then
             printf '%s\n' "${prefix}${tool_name}"
             return
@@ -38,9 +38,9 @@ AS="${RISCV_AS:-$(find_riscv_tool as || true)}"
 OBJCOPY="${RISCV_OBJCOPY:-$(find_riscv_tool objcopy || true)}"
 OBJDUMP="${RISCV_OBJDUMP:-$(find_riscv_tool objdump || true)}"
 
-[ -n "$AS" ] || die "cannot find RISC-V assembler. Install riscv64-unknown-elf-binutils/gcc, or set RISCV_PREFIX/RISCV_AS."
-[ -n "$OBJCOPY" ] || die "cannot find RISC-V objcopy. Install riscv64-unknown-elf-binutils/gcc, or set RISCV_PREFIX/RISCV_OBJCOPY."
-[ -n "$OBJDUMP" ] || die "cannot find RISC-V objdump. Install riscv64-unknown-elf-binutils/gcc, or set RISCV_PREFIX/RISCV_OBJDUMP."
+[ -n "$AS" ] || die "cannot find RISC-V assembler. Install a RISC-V ELF binutils/gcc toolchain, or set RISCV_PREFIX/RISCV_AS."
+[ -n "$OBJCOPY" ] || die "cannot find RISC-V objcopy. Install a RISC-V ELF binutils/gcc toolchain, or set RISCV_PREFIX/RISCV_OBJCOPY."
+[ -n "$OBJDUMP" ] || die "cannot find RISC-V objdump. Install a RISC-V ELF binutils/gcc toolchain, or set RISCV_PREFIX/RISCV_OBJDUMP."
 command -v hexdump >/dev/null 2>&1 || die "cannot find hexdump."
 
 mkdir -p "$HEX_DIR" "$BUILD_DIR"

@@ -20,7 +20,7 @@ module data_mem (
             end
         end
         else if (dmem_write) begin
-            dmem[dmem_addr[31:2]] <= dmem_wdata;
+            dmem[dmem_addr[9:2]] <= dmem_wdata;
         end
     end
 endmodule
