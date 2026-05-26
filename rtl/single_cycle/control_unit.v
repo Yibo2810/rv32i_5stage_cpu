@@ -21,9 +21,10 @@ module control_unit(
     reg illegal_main;
     reg illegal_alu;
 
-    localparam ALU_OP_ADD = 2'b00;    // addi, lw, sw
-    localparam ALU_OP_BRANCH = 2'b01; // beq
-    localparam ALU_OP_RTYPE = 2'b10;  // add, sub, later and/or/xor
+    localparam ALU_OP_ADD    = 2'b00;  // addi, lw, sw
+    localparam ALU_OP_BRANCH = 2'b01;  // beq
+    localparam ALU_OP_RTYPE  = 2'b10;  // add, sub, later and/or/xor
+    localparam ALU_OP_ITYPE  = 2'b11;  // andi/ori/slti/sltiu
 
 
     always @(*) begin
@@ -48,7 +49,7 @@ module control_unit(
                 reg_write = 1'b1;
                 alu_src   = 1'b1;
                 imm_sel   = `RV32I_IMM_I;
-                alu_op    = ALU_OP_ADD;
+                alu_op    = ALU_OP_ITYPE;
             end
 
             `RV32I_OPCODE_BRANCH : begin
@@ -93,19 +94,48 @@ module control_unit(
 
             ALU_OP_RTYPE : begin
                 case ({funct7,funct3})
-                    {7'b0000000, 3'b000} : alu_ctrl = `RV32I_ALU_ADD;
-                    {7'b0100000, 3'b000} : alu_ctrl = `RV32I_ALU_SUB;
-                    default: begin
-                        alu_ctrl = `RV32I_ALU_ADD;
-                        illegal_alu = 1'b1;
-                    end
+                    {`RV32I_FUNCT7_ADD, `RV32I_FUNCT3_ADD_SUB} : alu_ctrl = `RV32I_ALU_ADD;
+                    {`RV32I_FUNCT7_SUB, `RV32I_FUNCT3_ADD_SUB} : alu_ctrl = `RV32I_ALU_SUB;
+                    {`RV32I_FUNCT7_AND, `RV32I_FUNCT3_AND}     : alu_ctrl = `RV32I_ALU_AND;
+                    {`RV32I_FUNCT7_OR,  `RV32I_FUNCT3_OR}      : alu_ctrl = `RV32I_ALU_OR;
+                    {`RV32I_FUNCT7_XOR, `RV32I_FUNCT3_XOR}     : alu_ctrl = `RV32I_ALU_XOR;
+                    {`RV32I_FUNCT7_SLL, `RV32I_FUNCT3_SLL}     : alu_ctrl = `RV32I_ALU_SLL;
+                    {`RV32I_FUNCT7_SRL, `RV32I_FUNCT3_SRL}     : alu_ctrl = `RV32I_ALU_SRL;
+                    {`RV32I_FUNCT7_SRA, `RV32I_FUNCT3_SRA}     : alu_ctrl = `RV32I_ALU_SRA;
+                    {`RV32I_FUNCT7_SLT, `RV32I_FUNCT3_SLT}     : alu_ctrl = `RV32I_ALU_SLT;
+                    {`RV32I_FUNCT7_SLTU,`RV32I_FUNCT3_SLTU}    : alu_ctrl = `RV32I_ALU_SLTU;
+                    default: illegal_alu = 1'b1;
                 endcase
             end
 
-            default: begin
-                alu_ctrl = `RV32I_ALU_ADD;
-                illegal_alu = 1'b1;
+                ALU_OP_ITYPE : begin
+                case ({funct3})
+                    `RV32I_FUNCT3_ADDI  : alu_ctrl = `RV32I_ALU_ADD;
+                    `RV32I_FUNCT3_SLTI  : alu_ctrl = `RV32I_ALU_SLT;
+                    `RV32I_FUNCT3_SLTIU : alu_ctrl = `RV32I_ALU_SLTU;
+                    `RV32I_FUNCT3_XORI  : alu_ctrl = `RV32I_ALU_XOR;
+                    `RV32I_FUNCT3_ORI   : alu_ctrl = `RV32I_ALU_OR;
+                    `RV32I_FUNCT3_ANDI  : alu_ctrl = `RV32I_ALU_AND;
+
+                    `RV32I_FUNCT3_SLLI : begin
+                        if(funct7 == 7'b0000000)
+                            alu_ctrl = `RV32I_ALU_SLL;
+                        else
+                            illegal_alu = 1'b1;
+                    end
+
+                    `RV32I_FUNCT3_SRLI : begin
+                        case (funct7)
+                            7'b0000000 : alu_ctrl = `RV32I_ALU_SRL;
+                            7'b0100000 : alu_ctrl = `RV32I_ALU_SRA;
+                            default : illegal_alu = 1'b1;
+                        endcase
+                    end
+                    default: illegal_alu = 1'b1;
+                endcase
             end
+
+            default: illegal_alu = 1'b1;
         endcase
     end
 

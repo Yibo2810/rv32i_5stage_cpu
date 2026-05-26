@@ -11,8 +11,16 @@ module alu(
 
   always @(*) begin
     case (alu_ctrl)
-      `RV32I_ALU_ADD : result = src_a + src_b;
-      `RV32I_ALU_SUB : result = src_a - src_b;
+      `RV32I_ALU_ADD  : result = src_a + src_b;
+      `RV32I_ALU_SUB  : result = src_a - src_b;
+      `RV32I_ALU_AND  : result = src_a & src_b;
+      `RV32I_ALU_OR   : result = src_a | src_b;
+      `RV32I_ALU_XOR  : result = src_a ^ src_b;
+      `RV32I_ALU_SLT  : result = ($signed(src_a) < $signed(src_b)) ? 32'd1 : 32'd0;
+      `RV32I_ALU_SLTU : result = (src_a < src_b) ? 32'd1 : 32'd0;
+      `RV32I_ALU_SLL  : result = src_a << src_b[4:0];
+      `RV32I_ALU_SRL  : result = src_a >> src_b[4:0];
+      `RV32I_ALU_SRA  : result = $signed(src_a) >>> src_b[4:0];
       default : result = 32'b0;
     endcase
   end
