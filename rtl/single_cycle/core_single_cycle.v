@@ -1,5 +1,6 @@
 `timescale 1ns/1ps
-`include "rv32i_defs.vh"
+
+import single_pkg::*;
 
 module core_single_cycle(
     input rst,
@@ -43,10 +44,10 @@ module core_single_cycle(
     wire mem_write;
     wire reg_write;
     wire alu_src;
-    wire wb_sel;
+    wb_sel_e wb_sel;
     wire branch;
-    wire [3:0] alu_ctrl;
-    wire [2:0] imm_sel;
+    alu_ctrl_e alu_ctrl;
+    imm_sel_e imm_sel;
     wire illegal_instr;
 
     // 2. assign statements
@@ -117,4 +118,3 @@ module core_single_cycle(
         .illegal_instr(illegal_instr)
     );
 endmodule
-

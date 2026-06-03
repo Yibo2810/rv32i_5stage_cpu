@@ -115,7 +115,7 @@ The workflow:
 
 | Path | Role |
 |---|---|
-| `rtl/include/rv32i_defs.vh` | Shared RV32I constants |
+| `rtl/include/defs.vh` | Shared RV32I constants |
 | `rtl/single_cycle/` | Current v0.1 single-cycle CPU RTL |
 | `rtl/pipeline/` | Future five-stage pipeline placeholders |
 | `tb/tb_single_cycle.v` | Self-checking integration testbench |
