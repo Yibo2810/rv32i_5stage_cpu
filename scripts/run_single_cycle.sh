@@ -28,13 +28,13 @@ compile_single_cycle() {
     iverilog -g2012 -Wall \
         -I "$REPO_ROOT/rtl/include" \
         -o "$SIM" \
-        "$REPO_ROOT/rtl/include/single_pkg.sv" \
+        "$REPO_ROOT/rtl/include/single_rv32i_pkg.sv" \
         "$REPO_ROOT/rtl/single_cycle/pc.v" \
         "$REPO_ROOT/rtl/single_cycle/alu.sv" \
         "$REPO_ROOT/rtl/single_cycle/regfile.v" \
-        "$REPO_ROOT/rtl/single_cycle/imm_gen.v" \
+        "$REPO_ROOT/rtl/single_cycle/imm_gen.sv" \
         "$REPO_ROOT/rtl/single_cycle/control_unit.sv" \
-        "$REPO_ROOT/rtl/single_cycle/core_single_cycle.v" \
+        "$REPO_ROOT/rtl/single_cycle/core_single_cycle.sv" \
         "$REPO_ROOT/tb/models/ideal_instr_mem.v" \
         "$REPO_ROOT/tb/models/ideal_data_mem.v" \
         "$REPO_ROOT/tb/tb_single_cycle.v"

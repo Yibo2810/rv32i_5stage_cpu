@@ -1,7 +1,7 @@
-.PHONY: all single ri-sv pipeline clean
+.PHONY: all single ri-sv
 
-all: single pipeline
-
+all: single ri-sv
+	
 single:
 	./scripts/run_single_cycle.sh
 

@@ -28,20 +28,21 @@ compile_ri_sv() {
     need_tool iverilog
     need_tool vvp
 
-    need_file "$REPO_ROOT/rtl/include/single_pkg.sv"
-    need_file "$REPO_ROOT/tb/sv/ri_pkg.sv"
-    need_file "$REPO_ROOT/tb/sv/others.sv"
-    need_file "$REPO_ROOT/rtl/single_cycle/alu.sv"
+    need_file "$REPO_ROOT/rtl/include/single_rv32i_pkg.sv"
+    need_file "$REPO_ROOT/tb/sv/rv32i_ri_pkg.sv"
+    need_file "$REPO_ROOT/tb/sv/ri_execute_tb.sv"
 
     iverilog -g2012 -Wall \
         -I "$REPO_ROOT/rtl/include" \
         -I "$REPO_ROOT/tb/sv" \
         -s ri_execute_tb \
         -o "$SIM" \
-        "$REPO_ROOT/rtl/include/single_pkg.sv" \
-        "$REPO_ROOT/tb/sv/ri_pkg.sv" \
+        "$REPO_ROOT/rtl/include/single_rv32i_pkg.sv" \
+        "$REPO_ROOT/tb/sv/rv32i_ri_pkg.sv" \
+        "$REPO_ROOT/rtl/single_cycle/control_unit.sv" \
+        "$REPO_ROOT/rtl/single_cycle/imm_gen.sv" \
         "$REPO_ROOT/rtl/single_cycle/alu.sv" \
-        "$REPO_ROOT/tb/sv/others.sv"
+        "$REPO_ROOT/tb/sv/ri_execute_tb.sv"
 }
 
 run_test() {

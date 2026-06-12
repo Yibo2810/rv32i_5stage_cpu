@@ -3,52 +3,52 @@
 import single_pkg::*;
 
 module core_single_cycle(
-    input rst,
-    input clk,
+    input logic rst,
+    input logic clk,
 
-    input  [31:0] imem_rdata,
-    output [31:0] imem_addr,
+    input logic [31:0] imem_rdata,
+    output logic [31:0] imem_addr,
 
-    output dmem_read,
-    output dmem_write,
+    output logic dmem_read,
+    output logic dmem_write,
 
-    output [31:0] dmem_addr,
-    output [31:0] dmem_wdata,
-    input  [31:0] dmem_rdata
+    output logic [31:0] dmem_addr,
+    output logic [31:0] dmem_wdata,
+    input logic [31:0] dmem_rdata
 );
 
-    // 1. wires
-    wire        branch_taken;
-    wire [31:0] pc_next;
-    wire [31:0] pc_current;
-    wire [31:0] pc_plus_4;
-    wire [31:0] branch_target;
+    // 1. logics
+    logic        branch_taken;
+    logic [31:0] pc_next;
+    logic [31:0] pc_current;
+    logic [31:0] pc_plus_4;
+    logic [31:0] branch_target;
 
-    wire [31:0] alu_src_a;
-    wire [31:0] alu_src_b;
-    wire [31:0] alu_result;
-    wire        alu_zero;
+    logic [31:0] alu_src_a;
+    logic [31:0] alu_src_b;
+    logic [31:0] alu_result;
+    logic        alu_zero;
 
-    wire [31:0] instr;
-    wire [31:0] imm;
+    logic [31:0] instr;
+    logic [31:0] imm;
 
-    wire [4:0] rs1_addr;
-    wire [4:0] rs2_addr;
-    wire [4:0] rd_addr;
+    logic [4:0] rs1_addr;
+    logic [4:0] rs2_addr;
+    logic [4:0] rd_addr;
 
-    wire [31:0] rd_data;
-    wire [31:0] rs1_data;
-    wire [31:0] rs2_data;
+    logic [31:0] rd_data;
+    logic [31:0] rs1_data;
+    logic [31:0] rs2_data;
 
-    wire mem_read;
-    wire mem_write;
-    wire reg_write;
-    wire alu_src;
+    logic mem_read;
+    logic mem_write;
+    logic reg_write;
+    logic alu_src;
     wb_sel_e wb_sel;
-    wire branch;
+    logic branch;
     alu_ctrl_e alu_ctrl;
     imm_sel_e imm_sel;
-    wire illegal_instr;
+    logic illegal_instr;
 
     // 2. assign statements
     assign instr     = imem_rdata;
