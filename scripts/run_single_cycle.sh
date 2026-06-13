@@ -7,7 +7,7 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/sim/build}"
 LOG_DIR="$BUILD_DIR/logs"
 WAVE_DIR="$BUILD_DIR/waves"
-SIM="$BUILD_DIR/single_cycle.vvp"
+SIM="$BUILD_DIR/tb_single_cycle"
 MAX_CYCLES="${MAX_CYCLES:-20}"
 
 die() {
@@ -16,28 +16,29 @@ die() {
 }
 
 need_tool() {
-    command -v "$1" >/dev/null 2>&1 || die "cannot find $1. Install Icarus Verilog first."
+    command -v "$1" >/dev/null 2>&1 || die "cannot find $1. Install Verilator first."
 }
 
 compile_single_cycle() {
     mkdir -p "$BUILD_DIR" "$LOG_DIR" "$WAVE_DIR"
 
-    need_tool iverilog
-    need_tool vvp
+    need_tool verilator
 
-    iverilog -g2012 -Wall \
-        -I "$REPO_ROOT/rtl/include" \
-        -o "$SIM" \
+    verilator --binary --timing --trace -Wall -Wno-fatal \
+        --top-module tb_single_cycle \
+        +incdir+"$REPO_ROOT/rtl/include" \
         "$REPO_ROOT/rtl/include/single_rv32i_pkg.sv" \
         "$REPO_ROOT/rtl/single_cycle/pc.v" \
         "$REPO_ROOT/rtl/single_cycle/alu.sv" \
-        "$REPO_ROOT/rtl/single_cycle/regfile.v" \
+        "$REPO_ROOT/rtl/single_cycle/regfile.sv" \
         "$REPO_ROOT/rtl/single_cycle/imm_gen.sv" \
         "$REPO_ROOT/rtl/single_cycle/control_unit.sv" \
         "$REPO_ROOT/rtl/single_cycle/core_single_cycle.sv" \
         "$REPO_ROOT/tb/models/ideal_instr_mem.v" \
         "$REPO_ROOT/tb/models/ideal_data_mem.v" \
-        "$REPO_ROOT/tb/tb_single_cycle.v"
+        "$REPO_ROOT/tb/tb_single_cycle.v" \
+        -o "$SIM" \
+        -Mdir "$BUILD_DIR/obj_dir"
 }
 
 run_test() {
@@ -52,7 +53,7 @@ run_test() {
     [ -s "$hex" ] || die "missing or empty hex file: $hex"
 
     echo "==> $name"
-    if vvp "$SIM" \
+    if "$SIM" \
         "+TEST=$name" \
         "+HEX=$hex" \
         "+EXPECT_ADDR=$expect_addr" \

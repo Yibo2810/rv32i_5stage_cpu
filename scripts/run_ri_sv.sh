@@ -7,7 +7,7 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/sim/build/ri_sv}"
 LOG_DIR="$BUILD_DIR/logs"
 WAVE_DIR="$BUILD_DIR/waves"
-SIM="$BUILD_DIR/ri_execute_tb.vvp"
+SIM="$BUILD_DIR/ri_execute_tb"
 
 die() {
     echo "run_ri_sv.sh: $*" >&2
@@ -15,7 +15,7 @@ die() {
 }
 
 need_tool() {
-    command -v "$1" >/dev/null 2>&1 || die "cannot find $1. Install Icarus Verilog first."
+    command -v "$1" >/dev/null 2>&1 || die "cannot find $1. Install Verilator first."
 }
 
 need_file() {
@@ -25,24 +25,24 @@ need_file() {
 compile_ri_sv() {
     mkdir -p "$BUILD_DIR" "$LOG_DIR" "$WAVE_DIR"
 
-    need_tool iverilog
-    need_tool vvp
+    need_tool verilator
 
     need_file "$REPO_ROOT/rtl/include/single_rv32i_pkg.sv"
     need_file "$REPO_ROOT/tb/sv/rv32i_ri_pkg.sv"
     need_file "$REPO_ROOT/tb/sv/ri_execute_tb.sv"
 
-    iverilog -g2012 -Wall \
-        -I "$REPO_ROOT/rtl/include" \
-        -I "$REPO_ROOT/tb/sv" \
-        -s ri_execute_tb \
-        -o "$SIM" \
+    verilator --binary --timing -Wall -Wno-fatal \
+        --top-module ri_execute_tb \
+        +incdir+"$REPO_ROOT/rtl/include" \
+        +incdir+"$REPO_ROOT/tb/sv" \
         "$REPO_ROOT/rtl/include/single_rv32i_pkg.sv" \
         "$REPO_ROOT/tb/sv/rv32i_ri_pkg.sv" \
+        "$REPO_ROOT/rtl/single_cycle/alu.sv" \
         "$REPO_ROOT/rtl/single_cycle/control_unit.sv" \
         "$REPO_ROOT/rtl/single_cycle/imm_gen.sv" \
-        "$REPO_ROOT/rtl/single_cycle/alu.sv" \
-        "$REPO_ROOT/tb/sv/ri_execute_tb.sv"
+        "$REPO_ROOT/tb/sv/ri_execute_tb.sv" \
+        -o "$SIM" \
+        -Mdir "$BUILD_DIR/obj_dir"
 }
 
 run_test() {
@@ -51,7 +51,7 @@ run_test() {
     vcd="$WAVE_DIR/$test_name.vcd"
 
     echo "==> $test_name"
-    if vvp "$SIM" "+TEST=$test_name" "+VCD=$vcd" > "$log" 2>&1; then
+    if "$SIM" "+TEST=$test_name" "+VCD=$vcd" > "$log" 2>&1; then
         if grep -q "TEST PASS: $test_name" "$log"; then
             echo "PASS $test_name"
         else

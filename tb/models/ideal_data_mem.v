@@ -13,13 +13,14 @@ module data_mem (
     integer i;
     assign dmem_rdata = dmem[dmem_addr[9:2]];
 
-    always @(posedge clk ) begin
-        if (rst) begin
-            for (i = 0; i < 256; i = i + 1) begin
-                dmem[i] <= 32'b0;
-            end
+    initial begin
+        for (i = 0; i < 256; i = i + 1) begin
+            dmem[i] = 32'b0;
         end
-        else if (dmem_write) begin
+    end
+
+    always @(posedge clk ) begin
+        if (dmem_write) begin
             dmem[dmem_addr[9:2]] <= dmem_wdata;
         end
     end

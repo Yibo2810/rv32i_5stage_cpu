@@ -16,13 +16,13 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y make iverilog binutils-riscv64-unknown-elf bsdextrautils
+          sudo apt-get install -y make verilator binutils-riscv64-unknown-elf bsdextrautils
 
       - name: Check toolchain
         run: |
           riscv64-unknown-elf-as --version
           riscv64-unknown-elf-objcopy --version
-          iverilog -V
+          verilator --version
 
       - name: Generate hex files
         run: ./scripts/asm_to_hex.sh
@@ -49,4 +49,3 @@ jobs:
           path: |
             sim/build/logs/*.log
             sim/build/waves/*.vcd
-            sim/build/*.vvp
