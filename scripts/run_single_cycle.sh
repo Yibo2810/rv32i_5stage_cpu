@@ -27,7 +27,7 @@ compile_single_cycle() {
     verilator --binary --timing --trace -Wall -Wno-fatal \
         --top-module tb_single_cycle \
         +incdir+"$REPO_ROOT/rtl/include" \
-        "$REPO_ROOT/rtl/include/single_rv32i_pkg.sv" \
+        "$REPO_ROOT/rtl/include/single_pkg.sv" \
         "$REPO_ROOT/rtl/single_cycle/pc.v" \
         "$REPO_ROOT/rtl/single_cycle/alu.sv" \
         "$REPO_ROOT/rtl/single_cycle/regfile.sv" \

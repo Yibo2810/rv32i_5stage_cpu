@@ -27,16 +27,16 @@ compile_ri_sv() {
 
     need_tool verilator
 
-    need_file "$REPO_ROOT/rtl/include/single_rv32i_pkg.sv"
-    need_file "$REPO_ROOT/tb/sv/rv32i_ri_pkg.sv"
+    need_file "$REPO_ROOT/rtl/include/single_pkg.sv"
+    need_file "$REPO_ROOT/tb/sv/ri_pkg.sv"
     need_file "$REPO_ROOT/tb/sv/ri_execute_tb.sv"
 
     verilator --binary --timing -Wall -Wno-fatal \
         --top-module ri_execute_tb \
         +incdir+"$REPO_ROOT/rtl/include" \
         +incdir+"$REPO_ROOT/tb/sv" \
-        "$REPO_ROOT/rtl/include/single_rv32i_pkg.sv" \
-        "$REPO_ROOT/tb/sv/rv32i_ri_pkg.sv" \
+        "$REPO_ROOT/rtl/include/single_pkg.sv" \
+        "$REPO_ROOT/tb/sv/ri_pkg.sv" \
         "$REPO_ROOT/rtl/single_cycle/alu.sv" \
         "$REPO_ROOT/rtl/single_cycle/control_unit.sv" \
         "$REPO_ROOT/rtl/single_cycle/imm_gen.sv" \

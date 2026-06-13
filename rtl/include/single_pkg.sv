@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 package single_pkg;
 
   // Common widths

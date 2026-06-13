@@ -103,7 +103,6 @@ end
 
   data_mem u_dmem (
       .clk(clk),
-      .rst(rst),
       .dmem_read(dmem_read),
       .dmem_write(dmem_write),
       .dmem_addr(dmem_addr),

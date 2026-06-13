@@ -1,6 +1,5 @@
 module data_mem (
     input  clk,
-    input  rst,
 
     input dmem_read,
     input dmem_write,

@@ -1,6 +1,7 @@
 # RV32I 5-Stage CPU
 
-A learning-oriented RV32I CPU project implemented in Verilog.
+A learning-oriented RV32I CPU project implemented in a mix of Verilog and
+SystemVerilog.
 
 The project starts from a minimal verified single-cycle subset, then grows toward
 a classic five-stage pipeline. Later phases will add more RV32I instructions,
@@ -9,16 +10,18 @@ realistic memory interface.
 
 ## Current Milestone
 
-**v0.1 single-cycle verified subset**
+**v0.2.0 SystemVerilog R/I direct-verification milestone**
 
-This milestone is a single-cycle CPU baseline for a small RV32I subset. The
-subset has been run with directed assembly programs, generated machine-code hex
-files, ideal instruction/data memories, and a self-checking integration
-testbench. GitHub Actions also runs the same flow and uploads generated hex,
-logs, and waveforms as artifacts.
+v0.2.0 converts part of the single-cycle RTL and verification flow from Verilog
+to SystemVerilog and adds `tb/sv/ri_execute_tb.sv`, a self-checking directed
+testbench for the R/I decode-to-execute path. It directly connects
+`control_unit`, `imm_gen`, and `alu` and verifies all currently implemented
+R-type and ALU-immediate operations.
 
-This is not a complete RV32I implementation yet, and it is not the five-stage
-pipeline version.
+The earlier v0.1 assembly-level regression remains active for `add`, `sub`,
+`addi`, `lw`, `sw`, and `beq`. v0.2.0 does not claim that every newly added R/I
+instruction has been verified through the complete CPU, register file, memory,
+and writeback path yet.
 
 ## Status
 
@@ -29,6 +32,9 @@ pipeline version.
 - [x] ASM-to-HEX generation script for `$readmemh`
 - [x] Self-checking single-cycle directed testbench
 - [x] GitHub Actions flow for remote RTL simulation
+- [x] Partial RTL conversion from Verilog to SystemVerilog
+- [x] Directed R/I decode, immediate-generation, and ALU verification
+- [x] Verilator-based local and CI simulation flow
 - [ ] Complete RV32I instruction set
 - [ ] Stronger decoder legality checks for the expanded ISA
 - [ ] Broader verification with more directed tests, assertions, and coverage
@@ -37,7 +43,19 @@ pipeline version.
 
 ## Verified ISA Subset
 
-The v0.1 milestone verifies this intentionally small subset:
+v0.2.0 has two verification levels.
+
+The SystemVerilog direct test verifies the decode/immediate/execute behavior of:
+
+```text
+add, sub, and, or, xor, slt, sltu, sll, srl, sra
+addi, andi, ori, xori, slti, sltiu, slli, srli, srai
+```
+
+These checks cover instruction encoding, control decode, immediate generation,
+ALU-control selection, and ALU result comparison against a reference function.
+
+The complete single-cycle integration regression still verifies:
 
 | Instruction | Type | Directed test coverage | Final signature |
 |---|---|---|---|
@@ -53,6 +71,28 @@ immediate generation, ALU execution, load/store access, writeback, and branch
 next-PC selection.
 
 ## Verification Flow
+
+Run both the single-cycle integration tests and the R/I SystemVerilog direct
+test:
+
+```sh
+make all
+```
+
+Run only the R/I direct test:
+
+```sh
+make ri-sv
+```
+
+The R/I direct-test path is:
+
+```text
+ri_execute_tb.sv
+  -> instruction encoders and reference functions
+  -> control_unit + imm_gen + alu
+  -> per-instruction self-checking PASS/FAIL
+```
 
 The current single-cycle verification flow is:
 
@@ -106,19 +146,21 @@ Remote verification is defined in `.github/workflows/rtl.yml`.
 The workflow:
 
 1. Checks out the repository.
-2. Installs Icarus Verilog and RISC-V binutils.
+2. Installs Verilator and RISC-V binutils.
 3. Generates hex files from assembly.
 4. Runs the single-cycle directed test suite.
-5. Uploads generated hex, disassembly dumps, logs, waveforms, and the compiled simulation image as artifacts.
+5. Uploads generated hex, disassembly dumps, logs, and waveforms as artifacts.
 
 ## File Guide
 
 | Path | Role |
 |---|---|
-| `rtl/include/defs.vh` | Shared RV32I constants |
-| `rtl/single_cycle/` | Current v0.1 single-cycle CPU RTL |
+| `rtl/include/single_pkg.sv` | Shared SystemVerilog RV32I constants and control types |
+| `rtl/single_cycle/` | Current mixed Verilog/SystemVerilog single-cycle CPU RTL |
 | `rtl/pipeline/` | Future five-stage pipeline placeholders |
 | `tb/tb_single_cycle.v` | Self-checking integration testbench |
+| `tb/sv/ri_execute_tb.sv` | R/I directed test for control, immediate generation, and ALU execution |
+| `tb/sv/ri_pkg.sv` | R/I operation enum used by the direct test |
 | `tb/models/ideal_instr_mem.v` | Ideal instruction memory loaded from `+HEX=<file>` |
 | `tb/models/ideal_data_mem.v` | Ideal data memory used for load/store and final signatures |
 | `programs/asm/` | Directed assembly test programs |
@@ -126,25 +168,40 @@ The workflow:
 | `programs/expected/` | Human-readable expected test signatures |
 | `scripts/asm_to_hex.sh` | Assembly-to-hex generation flow |
 | `scripts/run_single_cycle.sh` | Single-cycle compile/run/check script |
+| `scripts/run_ri_sv.sh` | Verilator runner for the R/I SystemVerilog direct test |
 | `docs/` | Design, ISA, verification, and milestone notes |
 | `sim/` | Generated simulation artifacts, ignored by Git |
 
 ## Known Limitations
 
-- Only `add`, `sub`, `addi`, `lw`, `sw`, and `beq` are in the verified subset.
-- Other RV32I instructions are intentionally deferred, including logical ops,
-  shifts, comparisons, other branches, jumps, `lui`, `auipc`, byte/halfword
-  loads and stores, CSR instructions, and traps.
+- The 19 R/I operations are module-path directed tests, not yet complete
+  assembly-level integration tests for the whole CPU.
+- `ri_execute_tb.sv` is intentionally a learning exercise in SystemVerilog and
+  verification. At roughly 350 lines, it mixes instruction encoding, expected
+  control generation, reference execution, stimulus, and checking in one file.
+  It is too verbose and tightly coupled for long-term maintenance and will be
+  refactored after the learning goals are met.
+- Branch coverage is still limited to the existing `beq` integration test.
+- Load/store coverage is still limited to word operations (`lw`/`sw`).
 - The current memory model is ideal and word-oriented; it does not model byte
   enables, wait states, misalignment exceptions, or a bus protocol.
+- `regfile.sv` and `ideal_data_mem.v` currently use a Verilator-oriented
+  initialization workaround instead of reset-time array clearing with a
+  `for` loop and nonblocking assignments. This passes the current tests, but
+  portable reset and synthesis semantics must be revisited before treating the
+  implementation as production RTL.
 - Verification is directed and signature-based. Constrained-random testing,
   functional coverage, assertions, and UVM-style infrastructure are later work.
 - The five-stage pipeline files are placeholders for the next major phase.
 
 ## Next Steps
 
-1. Expand the single-cycle ISA subset in small groups.
-2. Add directed tests for each new instruction group before moving on.
-3. Tighten decoder legality checks as the ISA grows.
-4. Add x0/reset/alignment-focused tests.
-5. Start the five-stage pipeline only after the single-cycle baseline remains stable.
+1. Add all branch variants and both taken/not-taken cases.
+2. Add byte/halfword and signed/unsigned load variants plus store variants.
+3. Move the R/I direct-test helpers into smaller reusable packages/tasks.
+4. Add complete-core assembly regressions for the R/I instructions currently
+   covered only by `ri_execute_tb.sv`.
+5. Restore simulator-independent reset semantics for the register file and
+   ideal data memory.
+6. Add x0, illegal-instruction, reset, and alignment-focused tests.
+7. Start the five-stage pipeline only after the single-cycle baseline remains stable.
