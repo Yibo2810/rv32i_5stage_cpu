@@ -2,22 +2,25 @@
 
 package single_pkg;
 
-  // Common widths
-  localparam int XLEN       = 32;
-  localparam int REG_ADDR_W = 5;
-
   // Opcodes
   localparam logic [6:0] OPCODE_R_TYPE = 7'b0110011;
   localparam logic [6:0] OPCODE_I_TYPE = 7'b0010011;
   localparam logic [6:0] OPCODE_LOAD   = 7'b0000011;
   localparam logic [6:0] OPCODE_STORE  = 7'b0100011;
   localparam logic [6:0] OPCODE_BRANCH = 7'b1100011;
+  localparam logic [6:0] OPCODE_JAL    = 7'b1101111;
+  localparam logic [6:0] OPCODE_JALR   = 7'b1100111;
+  localparam logic [6:0] OPCODE_LUI    = 7'b0110111;
+  localparam logic [6:0] OPCODE_AUIPC  = 7'b0010111;
+  localparam logic [6:0] OPCODE_SYSTEM  = 7'b1110011;
 
   // funct3 - ALU register/immediate operations
-  localparam logic [2:0] FUNCT3_ADD_SUB = 3'b000;
-  localparam logic [2:0] FUNCT3_ADDI    = 3'b000;
-  localparam logic [2:0] FUNCT3_SLL     = 3'b001;
-  localparam logic [2:0] FUNCT3_SLLI    = 3'b001;
+  localparam logic [2:0] FUNCT3_ADD_SUB      = 3'b000;
+  localparam logic [2:0] FUNCT3_ADDI         = 3'b000;
+  localparam logic [2:0] FUNCT3_JALR         = 3'b000;
+  localparam logic [2:0] FUNCT3_ECALL_EBREAK = 3'b000;
+  localparam logic [2:0] FUNCT3_SLL          = 3'b001;
+  localparam logic [2:0] FUNCT3_SLLI         = 3'b001;
   localparam logic [2:0] FUNCT3_SLT     = 3'b010;
   localparam logic [2:0] FUNCT3_SLTI    = 3'b010;
   localparam logic [2:0] FUNCT3_SLTU    = 3'b011;
@@ -34,9 +37,20 @@ package single_pkg;
   localparam logic [2:0] FUNCT3_ANDI    = 3'b111;
 
   // funct3 - memory/branch operations
-  localparam logic [2:0] FUNCT3_LW  = 3'b010;
-  localparam logic [2:0] FUNCT3_SW  = 3'b010;
-  localparam logic [2:0] FUNCT3_BEQ = 3'b000;
+  localparam logic [2:0] FUNCT3_LB   = 3'b000;
+  localparam logic [2:0] FUNCT3_LH   = 3'b001;
+  localparam logic [2:0] FUNCT3_LW   = 3'b010;
+  localparam logic [2:0] FUNCT3_LBU  = 3'b100;
+  localparam logic [2:0] FUNCT3_LHU  = 3'b101;
+  localparam logic [2:0] FUNCT3_SB   = 3'b000;
+  localparam logic [2:0] FUNCT3_SH   = 3'b001;
+  localparam logic [2:0] FUNCT3_SW   = 3'b010;
+  localparam logic [2:0] FUNCT3_BEQ  = 3'b000;
+  localparam logic [2:0] FUNCT3_BNE  = 3'b001;
+  localparam logic [2:0] FUNCT3_BLT  = 3'b100;
+  localparam logic [2:0] FUNCT3_BGE  = 3'b101;
+  localparam logic [2:0] FUNCT3_BLTU = 3'b110;
+  localparam logic [2:0] FUNCT3_BGEU = 3'b111;
 
   // funct7 - R-type and shift-immediate operations
   localparam logic [6:0] FUNCT7_ADD  = 7'b0000000;
@@ -52,6 +66,8 @@ package single_pkg;
   localparam logic [6:0] FUNCT7_SLLI = 7'b0000000;
   localparam logic [6:0] FUNCT7_SRLI = 7'b0000000;
   localparam logic [6:0] FUNCT7_SRAI = 7'b0100000;
+  localparam logic [6:0] FUNCT7_ECALL = 7'b0000000;
+  localparam logic [6:0] FUNCT7_EBREAK = 7'b0000001;
 
   typedef enum logic [3:0] {
     ALU_ADD  = 4'b0000,
@@ -75,9 +91,26 @@ package single_pkg;
     IMM_J    = 3'b101
   } imm_sel_e;
 
-  typedef enum logic {
-    WB_ALU = 1'b0,
-    WB_MEM = 1'b1
+  typedef enum logic [1:0] {
+    WB_ALU = 2'b00,
+    WB_MEM = 2'b01,
+    WB_PC4 = 2'b10
   } wb_sel_e;
 
+  typedef enum logic [1:0] {
+    ALU_A_RS1 = 2'b00,
+    ALU_A_PC  = 2'b01,
+    ALU_A_ZERO= 2'b10
+  } alu_src_a_sel_e;
+
+  typedef enum logic [1:0] {
+    MEM_BYTE = 2'b00,
+    MEM_HALF = 2'b01,
+    MEM_WORD = 2'b10
+  } mem_size_e;
+
+  typedef enum logic [1:0] {
+    PC_TARGET_PC_IMM = 2'b00,
+    PC_TARGET_ALU    = 2'b01
+  } pc_target_sel_e;
 endpackage

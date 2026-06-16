@@ -19,6 +19,7 @@ module tb_single_cycle;
   wire [31:0] dmem_wdata;
   wire        dmem_read;
   wire        dmem_write;
+  wire [3:0]  dmem_wstrb;
 
   initial begin
     clk = 0;
@@ -66,8 +67,8 @@ module tb_single_cycle;
     repeat (max_cycles) begin
       @(posedge clk);
       #1;
-      $display("pc=%h instr=%h dmem_we=%b dmem_addr=%h dmem_wdata=%h",
-              imem_addr, imem_rdata, dmem_write, dmem_addr, dmem_wdata);
+      $display("pc=%h instr=%h dmem_we=%b dmem_addr=%h dmem_wdata=%h dmem_wstrb=%h",
+              imem_addr, imem_rdata, dmem_write, dmem_addr, dmem_wdata, dmem_wstrb);
     end
 
     // check final signature
@@ -93,7 +94,8 @@ end
     .dmem_write(dmem_write),
     .dmem_addr(dmem_addr),
     .dmem_wdata(dmem_wdata),
-    .dmem_rdata(dmem_rdata)
+    .dmem_rdata(dmem_rdata),
+    .dmem_wstrb(dmem_wstrb)
   );
   
   instr_mem u_imem (
@@ -107,6 +109,7 @@ end
       .dmem_write(dmem_write),
       .dmem_addr(dmem_addr),
       .dmem_wdata(dmem_wdata),
-      .dmem_rdata(dmem_rdata)
+      .dmem_rdata(dmem_rdata),
+      .dmem_wstrb(dmem_wstrb)
   );
 endmodule

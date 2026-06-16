@@ -7,21 +7,27 @@ module ri_execute_tb;
   logic [31:0]  instr;
   logic [31:0]  rs1_value;
   logic [31:0]  rs2_value;
-  
+
   logic [31:0]  result;
   logic [31:0]  imm;
   logic         zero;
   logic         mem_write;
   logic         mem_read;
   logic         reg_write;
-  logic         alu_src;
+  logic         alu_sel_b;
   wb_sel_e      wb_sel;
   alu_ctrl_e    alu_ctrl;
   imm_sel_e     imm_sel;
   logic         illegal_instr;
+  logic         branch_on_zero;
+  mem_size_e    mem_size;
+  logic         load_unsigned;
+  logic         jump_and_link;
+  pc_target_sel_e pc_target_sel;
+  alu_src_a_sel_e alu_src_a_sel;
   logic         branch;
   logic [31:0]  alu_src_b;
-  assign alu_src_b = alu_src ? imm : rs2_value;
+  assign alu_src_b = alu_sel_b ? imm : rs2_value;
   alu alu0 (
     .src_a(rs1_value),
     .src_b(alu_src_b),
@@ -34,12 +40,18 @@ module ri_execute_tb;
     .mem_write(mem_write),
     .mem_read(mem_read),
     .reg_write(reg_write),
-    .alu_src(alu_src),
+    .alu_sel_b(alu_sel_b),
     .wb_sel(wb_sel),
     .branch(branch),
     .alu_ctrl(alu_ctrl),
     .imm_sel(imm_sel),
-    .illegal_instr(illegal_instr)
+    .branch_on_zero(branch_on_zero),
+    .mem_size(mem_size),
+    .load_unsigned(load_unsigned),
+    .illegal_instr(illegal_instr),
+    .jump_and_link(jump_and_link),
+    .pc_target_sel(pc_target_sel),
+    .alu_src_a_sel(alu_src_a_sel)
   );
   imm_gen ig (
     .instr(instr),
@@ -84,7 +96,7 @@ module ri_execute_tb;
         funct7 = FUNCT7_XOR;
         funct3 = FUNCT3_XOR;
       end
-      RI_SLT : begin    
+      RI_SLT : begin
         funct7 = FUNCT7_SLT;
         funct3 = FUNCT3_SLT;
       end
@@ -140,7 +152,7 @@ module ri_execute_tb;
       RI_XORI : begin
         funct3 = FUNCT3_XORI;
       end
-      RI_SLTI : begin    
+      RI_SLTI : begin
         funct3 = FUNCT3_SLTI;
       end
       RI_SLTIU : begin
@@ -170,7 +182,7 @@ module ri_execute_tb;
     input logic [31:0] a,
     input logic [31:0] b
   );
-    
+
     unique case (op)
       RI_ADD, RI_ADDI: begin
         reference_result = a + b;
@@ -302,14 +314,14 @@ module ri_execute_tb;
     expected_result = reference_result(op, a, expected_b);
     expected_alu_ctrl = expected_ctrl(op);
     instr = (is_i_type) ? encode_i_instr(op, b_or_imm) : encode_r_instr(op);
-    
+
     #1;
 
     if (illegal_instr !== 1'b0) begin
       $fatal(1, "%s: unexpected illegal instruction", name);
     end
-    if (alu_src !== expected_src) begin
-      $fatal(1, "%s: alu_src mismatch: got %b, expected %b", name, alu_src, expected_src);
+    if (alu_sel_b !== expected_src) begin
+      $fatal(1, "%s: alu_sel_b mismatch: got %b, expected %b", name, alu_sel_b, expected_src);
     end
     if (imm_sel !== expected_imm_sel) begin
       $fatal(1, "%s: imm_sel mismatch: got %b, expected %b", name, imm_sel, expected_imm_sel);
@@ -317,7 +329,7 @@ module ri_execute_tb;
     if (alu_ctrl !== expected_alu_ctrl) begin
       $fatal(1, "%s: alu_ctrl mismatch: got %b, expected %b", name, alu_ctrl, expected_alu_ctrl);
     end
-    if (imm !== expected_imm) begin 
+    if (imm !== expected_imm) begin
       $fatal(1, "%s: imm mismatch: got %h, expected %h", name, imm, expected_imm);
     end
     if (result !== expected_result) begin

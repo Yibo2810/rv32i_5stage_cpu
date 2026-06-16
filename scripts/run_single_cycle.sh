@@ -33,6 +33,8 @@ compile_single_cycle() {
         "$REPO_ROOT/rtl/single_cycle/regfile.sv" \
         "$REPO_ROOT/rtl/single_cycle/imm_gen.sv" \
         "$REPO_ROOT/rtl/single_cycle/control_unit.sv" \
+        "$REPO_ROOT/rtl/single_cycle/pc_redirect_unit.sv" \
+        "$REPO_ROOT/rtl/single_cycle/load_store_unit.sv" \
         "$REPO_ROOT/rtl/single_cycle/core_single_cycle.sv" \
         "$REPO_ROOT/tb/models/ideal_instr_mem.v" \
         "$REPO_ROOT/tb/models/ideal_data_mem.v" \

@@ -10,18 +10,21 @@ realistic memory interface.
 
 ## Current Milestone
 
-**v0.2.0 SystemVerilog R/I direct-verification milestone**
+**feature/accomplish-single: expanded single-cycle RTL milestone**
 
-v0.2.0 converts part of the single-cycle RTL and verification flow from Verilog
-to SystemVerilog and adds `tb/sv/ri_execute_tb.sv`, a self-checking directed
-testbench for the R/I decode-to-execute path. It directly connects
-`control_unit`, `imm_gen`, and `alu` and verifies all currently implemented
-R-type and ALU-immediate operations.
+This branch extends the single-cycle core beyond the earlier v0.2.0 R/I
+direct-verification milestone. The RTL now includes a cleaner memory boundary
+with byte write strobes, a load/store unit for byte/halfword/word accesses,
+polarity-aware branch decisions for the full RV32I branch family, and redirect
+support for `jal`/`jalr`. It also adds datapath support for `lui` and `auipc`
+through explicit ALU source and writeback selection.
 
-The earlier v0.1 assembly-level regression remains active for `add`, `sub`,
-`addi`, `lw`, `sw`, and `beq`. v0.2.0 does not claim that every newly added R/I
-instruction has been verified through the complete CPU, register file, memory,
-and writeback path yet.
+The committed regression flow remains intentionally small: assembly-level
+single-cycle tests still cover `add`, `sub`, `addi`, `lw`, `sw`, and `beq`, while
+`tb/sv/ri_execute_tb.sv` checks the R/I decode-to-execute path. The expanded
+single-cycle behavior should be promoted into committed directed programs before
+the project claims full integration coverage for every newly connected
+instruction.
 
 ## Status
 
@@ -35,6 +38,8 @@ and writeback path yet.
 - [x] Partial RTL conversion from Verilog to SystemVerilog
 - [x] Directed R/I decode, immediate-generation, and ALU verification
 - [x] Verilator-based local and CI simulation flow
+- [x] Single-cycle RTL support for branch variants, jumps, upper immediates, and byte-lane memory access
+- [x] Architectural side-effect gating for illegal instructions and misaligned memory accesses
 - [ ] Complete RV32I instruction set
 - [ ] Stronger decoder legality checks for the expanded ISA
 - [ ] Broader verification with more directed tests, assertions, and coverage
@@ -44,6 +49,16 @@ and writeback path yet.
 ## Verified ISA Subset
 
 v0.2.0 has two verification levels.
+
+The current single-cycle RTL has datapath/control support for:
+
+```text
+add, sub, and, or, xor, slt, sltu, sll, srl, sra
+addi, andi, ori, xori, slti, sltiu, slli, srli, srai
+lb, lh, lw, lbu, lhu, sb, sh, sw
+beq, bne, blt, bge, bltu, bgeu
+jal, jalr, lui, auipc
+```
 
 The SystemVerilog direct test verifies the decode/immediate/execute behavior of:
 
@@ -181,10 +196,12 @@ The workflow:
   control generation, reference execution, stimulus, and checking in one file.
   It is too verbose and tightly coupled for long-term maintenance and will be
   refactored after the learning goals are met.
-- Branch coverage is still limited to the existing `beq` integration test.
-- Load/store coverage is still limited to word operations (`lw`/`sw`).
-- The current memory model is ideal and word-oriented; it does not model byte
-  enables, wait states, misalignment exceptions, or a bus protocol.
+- Committed branch integration coverage is still limited to the existing `beq`
+  program even though the RTL now decodes all RV32I branch variants.
+- Committed load/store integration coverage is still limited to word operations
+  even though the RTL now supports byte and halfword lanes.
+- The current memory model is ideal; it does not model wait states,
+  instruction-address misalignment traps, or a bus protocol.
 - `regfile.sv` and `ideal_data_mem.v` currently use a Verilator-oriented
   initialization workaround instead of reset-time array clearing with a
   `for` loop and nonblocking assignments. This passes the current tests, but
@@ -196,12 +213,12 @@ The workflow:
 
 ## Next Steps
 
-1. Add all branch variants and both taken/not-taken cases.
-2. Add byte/halfword and signed/unsigned load variants plus store variants.
+1. Add committed integration programs for all branch variants with taken and not-taken cases.
+2. Add committed integration programs for byte/halfword and signed/unsigned load/store variants.
 3. Move the R/I direct-test helpers into smaller reusable packages/tasks.
 4. Add complete-core assembly regressions for the R/I instructions currently
    covered only by `ri_execute_tb.sv`.
 5. Restore simulator-independent reset semantics for the register file and
    ideal data memory.
-6. Add x0, illegal-instruction, reset, and alignment-focused tests.
+6. Add x0, illegal-instruction, reset, and alignment-focused committed tests.
 7. Start the five-stage pipeline only after the single-cycle baseline remains stable.
