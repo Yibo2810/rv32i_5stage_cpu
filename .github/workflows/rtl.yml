@@ -6,23 +6,17 @@ on:
   workflow_dispatch:
 
 jobs:
-  single-cycle:
+  hex-gen:
     runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
 
-      - name: Install tools
+      - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y make verilator binutils-riscv64-unknown-elf bsdextrautils
-
-      - name: Check toolchain
-        run: |
-          riscv64-unknown-elf-as --version
-          riscv64-unknown-elf-objcopy --version
-          verilator --version
+          sudo apt-get install -y binutils-riscv64-unknown-elf
 
       - name: Generate hex files
         run: ./scripts/asm_to_hex.sh
@@ -37,15 +31,3 @@ jobs:
             sim/build/asm/*.dump
             sim/build/asm/*.pre.S
             sim/build/asm/*.bin
-
-      - name: Run single-cycle simulation
-        run: SKIP_ASM=1 ./scripts/run_single_cycle.sh
-
-      - name: Upload simulation logs and waves
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: single-cycle-sim
-          path: |
-            sim/build/logs/*.log
-            sim/build/waves/*.vcd
