@@ -39,6 +39,11 @@ compile_single_cycle() {
         "$REPO_ROOT/tb/models/ideal_instr_mem.v" \
         "$REPO_ROOT/tb/models/ideal_data_mem.v" \
         "$REPO_ROOT/tb/tb_single_cycle.v" \
+        "$REPO_ROOT/tb/sv/core/core_mem_if.sv" \
+        "$REPO_ROOT/tb/sv/core/core_memory_model.sv" \
+        "$REPO_ROOT/tb/sv/core/core_monitor.sv" \
+        "$REPO_ROOT/tb/sv/core/core_sv_tb.sv" \
+        "$REPO_ROOT/tb/sv/core/core_verfi_pkg.sv" \
         -o "$SIM" \
         -Mdir "$BUILD_DIR/obj_dir"
 }

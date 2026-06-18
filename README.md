@@ -19,6 +19,14 @@ polarity-aware branch decisions for the full RV32I branch family, and redirect
 support for `jal`/`jalr`. It also adds datapath support for `lui` and `auipc`
 through explicit ALU source and writeback selection.
 
+The verification architecture has been migrated from a shell-script + Verilog
+testbench flow (`scripts/run_single_cycle.sh` + `tb/tb_single_cycle.v`) to a
+**VCS-based SystemVerilog testbench** (`tb/sv/core/core_sv_tb.sv`). The new
+testbench uses a modular architecture with a dedicated `core_mem_if` interface,
+a clocked `core_memory_model` for combined instruction/data memory, and a
+configuration-driven `core_verif_pkg` for test case management. This moves the
+project into a professional-grade verification environment.
+
 The committed regression flow remains intentionally small: assembly-level
 single-cycle tests still cover `add`, `sub`, `addi`, `lw`, `sw`, and `beq`, while
 `tb/sv/ri_execute_tb.sv` checks the R/I decode-to-execute path. The expanded
@@ -40,6 +48,7 @@ instruction.
 - [x] Verilator-based local and CI simulation flow
 - [x] Single-cycle RTL support for branch variants, jumps, upper immediates, and byte-lane memory access
 - [x] Architectural side-effect gating for illegal instructions and misaligned memory accesses
+- [x] VCS-based SystemVerilog testbench with modular interface and memory model
 - [ ] Complete RV32I instruction set
 - [ ] Stronger decoder legality checks for the expanded ISA
 - [ ] Broader verification with more directed tests, assertions, and coverage
@@ -86,6 +95,33 @@ immediate generation, ALU execution, load/store access, writeback, and branch
 next-PC selection.
 
 ## Verification Flow
+
+### VCS-based SystemVerilog Testbench (primary)
+
+The new modular testbench replaces the legacy shell-script flow with a
+professional VCS environment:
+
+```sh
+make -f Makefile.vcs build   # compile
+make -f Makefile.vcs run     # run
+```
+
+The architecture:
+
+```text
+core_sv_tb.sv
+  ├── core_verif_pkg.sv     → test configs, check kinds, expected values
+  ├── core_mem_if.sv        → unified clk/rst/memory interface with modports
+  ├── core_memory_model.sv  → clocked imem/dmem with init, hex load, store
+  └── core_single_cycle.sv  → DUT
+```
+
+Test cases are defined as `core_test_cfg_t` structs in the `initial` block. Each
+config specifies a hex program, max cycles, check type, and expected signature.
+The testbench drives reset, runs cycles with per-cycle signal display, and
+self-checks dmem signatures against expected values.
+
+### Legacy Shell-based Flow
 
 Run both the single-cycle integration tests and the R/I SystemVerilog direct
 test:
@@ -173,7 +209,14 @@ The workflow:
 | `rtl/include/single_pkg.sv` | Shared SystemVerilog RV32I constants and control types |
 | `rtl/single_cycle/` | Current mixed Verilog/SystemVerilog single-cycle CPU RTL |
 | `rtl/pipeline/` | Future five-stage pipeline placeholders |
-| `tb/tb_single_cycle.v` | Self-checking integration testbench |
+| `tb/tb_single_cycle.v` | Legacy self-checking integration testbench (shell flow) |
+| `tb/sv/core/core_sv_tb.sv` | **VCS-based SystemVerilog testbench** — config-driven, self-checking |
+| `tb/sv/core/core_mem_if.sv` | Clock/reset/memory interface with core/mem_model/monitor modports |
+| `tb/sv/core/core_memory_model.sv` | Clocked unified instruction/data memory with init and byte-write store |
+| `tb/sv/core/core_verif_pkg.sv` | Test configuration types, check kinds, and test ID enum |
+| `tb/sv/core/core_monitor.sv` | Passive signal monitor (placeholder for assertions/coverage) |
+| `tb/filelists/core_sv.f` | VCS compile filelist for the SV testbench |
+| `Makefile.vcs` | VCS build/run targets for the SV testbench |
 | `tb/sv/ri_execute_tb.sv` | R/I directed test for control, immediate generation, and ALU execution |
 | `tb/sv/ri_pkg.sv` | R/I operation enum used by the direct test |
 | `tb/models/ideal_instr_mem.v` | Ideal instruction memory loaded from `+HEX=<file>` |

@@ -19,11 +19,12 @@ module regfile(
   assign rs1_data = (rs1_addr == 5'b0) ? 32'b0 : regs[rs1_addr];
   assign rs2_data = (rs2_addr == 5'b0) ? 32'b0 : regs[rs2_addr];
 
-  always_ff @(posedge clk ) begin
-    if (!rst && w_en && rd_addr != 0) begin
+  always_ff @(posedge clk) begin
+    if (rst) begin
+      for (int i = 0; i < 32; i++) regs[i] <= 32'b0;
+    end 
+    else if (w_en && rd_addr != 0) begin
       regs[rd_addr] <= rd_data;
     end
-
   end
 endmodule
-

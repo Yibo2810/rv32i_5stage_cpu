@@ -1,3 +1,7 @@
+# Python venv
+.venv/
+venv/
+
 # Simulation artifacts
 sim/build/
 sim/*.vcd
