@@ -27,4 +27,15 @@ package core_verif_pkg;
         string               hex_path;
     } core_test_cfg_t;
 
+    typedef struct {
+        logic [31:0] pc;
+        logic [31:0] instr;
+        logic        is_read;
+        logic        is_write;
+        logic [31:0] addr;
+        logic [31:0] wdata;
+        logic [3:0]  wstrb;
+        logic [31:0] rdata;
+    } core_mem_txn_t;
+
 endpackage

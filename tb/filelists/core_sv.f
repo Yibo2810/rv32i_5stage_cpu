@@ -14,4 +14,5 @@ rtl/single_cycle/load_store_unit.sv
 rtl/single_cycle/core_single_cycle.sv
 
 tb/sv/core/core_memory_model.sv
+tb/sv/core/core_monitor.sv
 tb/sv/core/core_sv_tb.sv

@@ -6,7 +6,7 @@ module core_sv_tb;
 
     logic clk;
     logic rst;
-    core_test_cfg_t cfg;
+    core_test_cfg_t tests[$];
     logic [31:0] actual_value;
 
     task automatic apply_reset();
@@ -30,6 +30,48 @@ module core_sv_tb;
                 mem_if.dmem_wstrb
             );
         end
+    endtask
+    
+    task automatic build_test_list();
+        tests.push_back('{
+            id: CORE_TEST_ADD,
+            name: "add_test",
+            hex_path: "programs/hex/add_test.hex",
+            max_cycles: 20,
+            check_kind: CHECK_DMEM_WORD,
+            expected_dmem_word_addr: 0,
+            expected_dmem_word_value: 32'h0000000c
+        });
+
+        tests.push_back('{
+            id: CORE_TEST_SUB,
+            name: "sub_test",
+            hex_path: "programs/hex/sub_test.hex",
+            max_cycles: 20,
+            check_kind: CHECK_DMEM_WORD,
+            expected_dmem_word_addr: 0,
+            expected_dmem_word_value: 32'h00000005
+        });
+
+        tests.push_back('{
+            id: CORE_TEST_BRANCH,
+            name: "branch_test",
+            hex_path: "programs/hex/branch_test.hex",
+            max_cycles: 20,
+            check_kind: CHECK_DMEM_WORD,
+            expected_dmem_word_addr: 0,
+            expected_dmem_word_value: 32'h00000001
+        });
+
+        tests.push_back('{
+            id: CORE_TEST_LOAD_STORE,
+            name: "load_store_test",
+            hex_path: "programs/hex/load_store_test.hex",
+            max_cycles: 20,
+            check_kind: CHECK_DMEM_WORD,
+            expected_dmem_word_addr: 1,
+            expected_dmem_word_value: 32'h0000002a
+        });
     endtask
     
     task automatic check_result(input core_test_cfg_t t);
@@ -60,9 +102,10 @@ module core_sv_tb;
 
         u_memory.init_mem();
         u_memory.load_hex(t.hex_path);
-
+        u_monitor.clear();
         apply_reset();
         run_cycles(t.max_cycles);
+        u_monitor.report(t.name);
         check_result(t);
 
         $display("PASS: %s", t.name);
@@ -74,17 +117,10 @@ initial begin
   clk = 0;
   rst = 1;
 
-  cfg = '{
-    id: CORE_TEST_ADD,
-    name: "add_test",
-    hex_path: "programs/hex/add_test.hex",
-    max_cycles: 20,
-    check_kind: CHECK_DMEM_WORD,
-    expected_dmem_word_addr: 0,
-    expected_dmem_word_value: 32'h0000000c
-  };
+  build_test_list();
 
-  run_test(cfg);
+  foreach (tests[i])
+    run_test(tests[i]);
 
   $display("ALL CORE SV TESTS PASSED");
   $finish;
@@ -109,6 +145,10 @@ end
     );
 
     core_memory_model u_memory(
+        .mem(mem_if)
+    );
+
+    core_monitor u_monitor(
         .mem(mem_if)
     );
 endmodule
