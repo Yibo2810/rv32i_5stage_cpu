@@ -15,4 +15,5 @@ rtl/single_cycle/core_single_cycle.sv
 
 tb/sv/core/core_memory_model.sv
 tb/sv/core/core_monitor.sv
+tb/sv/core/core_scoreboard.sv
 tb/sv/core/core_sv_tb.sv

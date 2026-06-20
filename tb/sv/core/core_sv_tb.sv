@@ -6,110 +6,105 @@ module core_sv_tb;
 
     logic clk;
     logic rst;
-    core_test_cfg_t tests[$];
-    logic [31:0] actual_value;
+    core_test_case_t tests[$];
 
     task automatic apply_reset();
         rst = 1'b1;
         repeat (2) @(negedge clk);
         rst = 1'b0;
     endtask
-
-    task automatic run_cycles(
-        input int unsigned cycles
-    );
+    
+    task automatic run_cycles(input int unsigned cycles);
         repeat (cycles) begin
             @(posedge clk);
             #1;
-            $display("pc=%h instr=%h dmem_we=%b dmem_addr=%h dmem_wdata=%h dmem_wstrb=%h",
-                mem_if.imem_addr,
-                mem_if.imem_rdata,
-                mem_if.dmem_write,
-                mem_if.dmem_addr,
-                mem_if.dmem_wdata,
-                mem_if.dmem_wstrb
-            );
         end
     endtask
-    
+
     task automatic build_test_list();
-        tests.push_back('{
-            id: CORE_TEST_ADD,
-            name: "add_test",
-            hex_path: "programs/hex/add_test.hex",
-            max_cycles: 20,
-            check_kind: CHECK_DMEM_WORD,
-            expected_dmem_word_addr: 0,
-            expected_dmem_word_value: 32'h0000000c
-        });
+        core_test_case_t t;
+        tests.delete();
 
-        tests.push_back('{
-            id: CORE_TEST_SUB,
-            name: "sub_test",
-            hex_path: "programs/hex/sub_test.hex",
-            max_cycles: 20,
-            check_kind: CHECK_DMEM_WORD,
-            expected_dmem_word_addr: 0,
-            expected_dmem_word_value: 32'h00000005
+        t.expected_txns.delete();
+        t.name      =   "add_test";
+        t.hex_path  =   "programs/hex/add_test.hex";
+        t.max_cycles  =    20;
+        t.expected_txns.push_back('{
+            kind:   MEM_EXPECT_WRITE,
+            addr:   32'd0,
+            data:   32'd12,
+            wstrb:  4'b1111
         });
+        tests.push_back(t);
+        
+        t.expected_txns.delete();
+        t.name       = "sub_test";
+        t.hex_path   = "programs/hex/sub_test.hex";
+        t.max_cycles = 20;
+        t.expected_txns.push_back('{
+            kind:  MEM_EXPECT_WRITE,
+            addr:  32'd0,
+            data:  32'd5,
+            wstrb: 4'b1111
+        });
+        tests.push_back(t);
 
-        tests.push_back('{
-            id: CORE_TEST_BRANCH,
-            name: "branch_test",
-            hex_path: "programs/hex/branch_test.hex",
-            max_cycles: 20,
-            check_kind: CHECK_DMEM_WORD,
-            expected_dmem_word_addr: 0,
-            expected_dmem_word_value: 32'h00000001
+        t.expected_txns.delete();
+        t.name       = "branch_test";
+        t.hex_path   = "programs/hex/branch_test.hex";
+        t.max_cycles = 20;
+        t.expected_txns.push_back('{
+            kind:  MEM_EXPECT_WRITE,
+            addr:  32'd0,
+            data:  32'd1,
+            wstrb: 4'b1111
         });
+        tests.push_back(t);
 
-        tests.push_back('{
-            id: CORE_TEST_LOAD_STORE,
-            name: "load_store_test",
-            hex_path: "programs/hex/load_store_test.hex",
-            max_cycles: 20,
-            check_kind: CHECK_DMEM_WORD,
-            expected_dmem_word_addr: 1,
-            expected_dmem_word_value: 32'h0000002a
+        t.expected_txns.delete();
+        t.name       = "load_store_test";
+        t.hex_path   = "programs/hex/load_store_test.hex";
+        t.max_cycles = 20;
+        t.expected_txns.push_back('{
+            kind:  MEM_EXPECT_WRITE,
+            addr:  32'd0,
+            data:  32'd42,
+            wstrb: 4'b1111
         });
+        t.expected_txns.push_back('{
+            kind:  MEM_EXPECT_READ,
+            addr:  32'd0,
+            data:  32'd42,
+            wstrb: 4'b0000
+        });
+        t.expected_txns.push_back('{
+            kind:  MEM_EXPECT_WRITE,
+            addr:  32'd4,
+            data:  32'd42,
+            wstrb: 4'b1111
+        });
+        tests.push_back(t);
     endtask
-    
-    task automatic check_result(input core_test_cfg_t t);
-        case (t.check_kind)
-            CHECK_DMEM_WORD: begin
-                actual_value = u_memory.dmem[t.expected_dmem_word_addr];
 
-                if (actual_value !== t.expected_dmem_word_value) begin
-                    $display("FAIL: %s expected dmem[%0d]=%08h, got %08h",
-                    t.name,
-                    t.expected_dmem_word_addr,
-                    t.expected_dmem_word_value,
-                    actual_value
-                    );
-                    $fatal(1);
-                end
-            end
-
-            default: begin
-                $display("ERROR: unsupported check kind");
-                $fatal(1);
-            end
-        endcase
-    endtask
-
-    task automatic run_test(input core_test_cfg_t t);
+    task automatic run_test(input core_test_case_t t);
         $display("RUN: %s", t.name);
 
         u_memory.init_mem();
         u_memory.load_hex(t.hex_path);
+
         u_monitor.clear();
+
         apply_reset();
         run_cycles(t.max_cycles);
-        u_monitor.report(t.name);
-        check_result(t);
+        u_scoreboard.check(
+            t.name,
+            t.expected_txns,
+            u_monitor.observed_txns
+        );
 
-        $display("PASS: %s", t.name);
     endtask
+
+
 
     always #5 clk = ~clk;
 
@@ -151,4 +146,6 @@ end
     core_monitor u_monitor(
         .mem(mem_if)
     );
+
+    core_scoreboard u_scoreboard();
 endmodule

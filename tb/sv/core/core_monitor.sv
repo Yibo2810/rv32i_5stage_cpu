@@ -26,28 +26,4 @@ module core_monitor (
             observed_txns.push_back(txn);
         end
     end
-    
-    task automatic report(input string test_name);
-        $display("MONITOR: %s captured %0d transactions",test_name,observed_txns.size());
-
-        foreach (observed_txns[i]) begin
-            if (observed_txns[i].is_write) begin
-                $display("TXN[%0d] WRITE: pc=%08h addr=%08h wdata=%08h wstrb=%08h",
-                        i,
-                        observed_txns[i].pc,
-                        observed_txns[i].addr,
-                        observed_txns[i].wdata,
-                        observed_txns[i].wstrb
-                        );
-            end
-            else if (observed_txns[i].is_read) begin
-                $display("TXN[%0d] READ: pc=%08h addr=%08h rdata=%08h",
-                        i,
-                        observed_txns[i].pc,
-                        observed_txns[i].addr,
-                        observed_txns[i].rdata
-                        );
-            end
-        end
-    endtask
 endmodule

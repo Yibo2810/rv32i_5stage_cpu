@@ -1,15 +1,19 @@
-.PHONY: all single ri-sv
+.PHONY: build run
 
-all: single ri-sv
-	
-single:
-	./scripts/run_single_cycle.sh
+BUILD_DIR := sim/build/core_vcs
+SIMV      := $(BUILD_DIR)/simv
+FILELIST  := tb/filelists/core_sv.f
 
-ri-sv:
-	./scripts/run_ri_sv.sh
+build:
+	@mkdir -p $(BUILD_DIR)/csrc
+	vcs \
+	  -full64 \
+	  -sverilog \
+	  -top core_sv_tb \
+	  -f $(FILELIST) \
+	  -Mdir=$(BUILD_DIR)/csrc \
+	  -o $(SIMV) \
+	  -l $(BUILD_DIR)/compile.log
 
-pipeline:
-	./scripts/run_pipeline.sh
-
-clean:
-	rm -rf sim/build sim/*.vcd sim/*.log
+run: build
+	./$(SIMV) -l $(BUILD_DIR)/run.log
