@@ -72,7 +72,7 @@ module core_single_cycle(
     assign alu_src_b     = alu_sel_b ? imm : rs2_data;
     assign dmem_addr     = alu_result;
     assign mem_fault     = (mem_write || mem_read) && mem_misaligned;
-    assign side_effect_ok = !illegal_instr && !mem_fault;
+    assign side_effect_ok = !rst && !illegal_instr && !mem_fault;
     assign dmem_read     = mem_read && side_effect_ok;
     assign dmem_write    = mem_write && side_effect_ok;
     assign regfile_w_en  = reg_write && side_effect_ok;

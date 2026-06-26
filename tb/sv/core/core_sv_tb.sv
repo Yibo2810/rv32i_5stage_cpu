@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 import core_verif_pkg::*;
-
+import core_test_db_pkg::*;
 module core_sv_tb;
 
     logic clk;
@@ -11,79 +11,26 @@ module core_sv_tb;
     task automatic apply_reset();
         rst = 1'b1;
         repeat (2) @(negedge clk);
+        @(negedge clk);
         rst = 1'b0;
     endtask
     
     task automatic run_cycles(input int unsigned cycles);
         repeat (cycles) begin
-            @(posedge clk);
-            #1;
+            @(mem_if.cb);
+            @(negedge clk);
         end
     endtask
 
-    task automatic build_test_list();
-        core_test_case_t t;
-        tests.delete();
+    task automatic check_signatures(input core_test_case_t t);
+        logic [31:0] actual_word;
 
-        t.expected_txns.delete();
-        t.name      =   "add_test";
-        t.hex_path  =   "programs/hex/add_test.hex";
-        t.max_cycles  =    20;
-        t.expected_txns.push_back('{
-            kind:   MEM_EXPECT_WRITE,
-            addr:   32'd0,
-            data:   32'd12,
-            wstrb:  4'b1111
-        });
-        tests.push_back(t);
-        
-        t.expected_txns.delete();
-        t.name       = "sub_test";
-        t.hex_path   = "programs/hex/sub_test.hex";
-        t.max_cycles = 20;
-        t.expected_txns.push_back('{
-            kind:  MEM_EXPECT_WRITE,
-            addr:  32'd0,
-            data:  32'd5,
-            wstrb: 4'b1111
-        });
-        tests.push_back(t);
-
-        t.expected_txns.delete();
-        t.name       = "branch_test";
-        t.hex_path   = "programs/hex/branch_test.hex";
-        t.max_cycles = 20;
-        t.expected_txns.push_back('{
-            kind:  MEM_EXPECT_WRITE,
-            addr:  32'd0,
-            data:  32'd1,
-            wstrb: 4'b1111
-        });
-        tests.push_back(t);
-
-        t.expected_txns.delete();
-        t.name       = "load_store_test";
-        t.hex_path   = "programs/hex/load_store_test.hex";
-        t.max_cycles = 20;
-        t.expected_txns.push_back('{
-            kind:  MEM_EXPECT_WRITE,
-            addr:  32'd0,
-            data:  32'd42,
-            wstrb: 4'b1111
-        });
-        t.expected_txns.push_back('{
-            kind:  MEM_EXPECT_READ,
-            addr:  32'd0,
-            data:  32'd42,
-            wstrb: 4'b0000
-        });
-        t.expected_txns.push_back('{
-            kind:  MEM_EXPECT_WRITE,
-            addr:  32'd4,
-            data:  32'd42,
-            wstrb: 4'b1111
-        });
-        tests.push_back(t);
+        foreach (t.expected_sigs[i]) begin
+            u_memory.peek_word(t.expected_sigs[i].addr, actual_word);
+            u_scoreboard.check_signature_word(
+                t.name, t.expected_sigs[i].addr, t.expected_sigs[i].data, actual_word
+            );
+        end
     endtask
 
     task automatic run_test(input core_test_case_t t);
@@ -96,30 +43,28 @@ module core_sv_tb;
 
         apply_reset();
         run_cycles(t.max_cycles);
-        u_scoreboard.check(
-            t.name,
-            t.expected_txns,
-            u_monitor.observed_txns
-        );
+
+        if (t.expected_txns.size() != 0)
+            u_scoreboard.check(t.name, t.expected_txns, u_monitor.observed_txns);
+
+        check_signatures(t);
 
     endtask
-
-
-
+    
     always #5 clk = ~clk;
 
-initial begin
-  clk = 0;
-  rst = 1;
+    initial begin
+    clk = 0;
+    rst = 1;
 
-  build_test_list();
+    build_core_test_list(tests);
 
-  foreach (tests[i])
-    run_test(tests[i]);
+    foreach (tests[i])
+        run_test(tests[i]);
 
-  $display("ALL CORE SV TESTS PASSED");
-  $finish;
-end
+    $display("ALL CORE SV TESTS PASSED");
+    $finish;
+    end
 
     core_mem_if mem_if(
         .clk(clk),
@@ -148,4 +93,6 @@ end
     );
 
     core_scoreboard u_scoreboard();
+
+    core_assertions u_assertions(mem_if.monitor);
 endmodule

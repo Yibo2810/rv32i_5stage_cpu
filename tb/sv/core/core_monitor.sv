@@ -12,17 +12,17 @@ module core_monitor (
         observed_txns.delete();
     endtask
 
-    always @(posedge mem.clk) begin
-        if (!mem.rst && (mem.dmem_read || mem.dmem_write)) begin
+    always @(mem.cb) begin
+        if (!mem.cb.rst && (mem.cb.dmem_read || mem.cb.dmem_write)) begin
             core_mem_txn_t  txn;
-            txn.pc      = mem.imem_addr;
-            txn.instr   = mem.imem_rdata;
-            txn.is_read = mem.dmem_read;
-            txn.is_write= mem.dmem_write;
-            txn.addr    = mem.dmem_addr;
-            txn.wdata   = mem.dmem_wdata;
-            txn.wstrb   = mem.dmem_wstrb;
-            txn.rdata   = mem.dmem_rdata;
+            txn.pc      = mem.cb.imem_addr;
+            txn.instr   = mem.cb.imem_rdata;
+            txn.is_read = mem.cb.dmem_read;
+            txn.is_write= mem.cb.dmem_write;
+            txn.addr    = mem.cb.dmem_addr;
+            txn.wdata   = mem.cb.dmem_wdata;
+            txn.wstrb   = mem.cb.dmem_wstrb;
+            txn.rdata   = mem.cb.dmem_rdata;
             observed_txns.push_back(txn);
         end
     end

@@ -1,4 +1,4 @@
-`timescale 1ps/1ps
+`timescale 1ns/1ps
 
 package core_verif_pkg;
 
@@ -24,12 +24,19 @@ package core_verif_pkg;
         logic [31:0]           data;
         logic [3:0]            wstrb;
     } core_mem_expect_t;
+    
+    typedef struct {
+        logic [31:0] addr;
+        logic [31:0] data;
+    } core_sig_expect_t;
 
     typedef struct {
         string          name;
         string          hex_path;
         int unsigned    max_cycles;
         core_mem_expect_t expected_txns[$];
+        core_sig_expect_t expected_sigs[$];
     } core_test_case_t;
 
+    
 endpackage

@@ -9,7 +9,7 @@ module core_scoreboard;
         const ref core_mem_expect_t  expected[$],
         const ref core_mem_txn_t actual[$]
     );
-        int unsigned errors = 0;
+        int unsigned errors = 0; //only for automatic
         if (actual.size() != expected.size()) begin
             $display(
                 "SCOREBOARD FAIL: %s expected %0d transactions, got %0d",
@@ -28,7 +28,6 @@ module core_scoreboard;
                         $error("[%0d] WRITE: expected a write transaction", i);
                         errors++;
                     end
-
                     if (actual[i].addr !== expected[i].addr) begin
                         $error("[%0d] WRITE: addr mismatch, exp=0x%08h, act=0x%08h",
                                 i, expected[i].addr, actual[i].addr);
@@ -85,5 +84,21 @@ module core_scoreboard;
 
         $display("SCOREBOARD PASS: %s (%0d transactions)",
                 test_name, actual.size());
+    endtask
+
+    task automatic check_signature_word(
+        input string       test_name,
+        input logic [31:0] addr,
+        input logic [31:0] expected,
+        input logic [31:0] actual
+    );
+        if (actual !== expected) begin
+            $fatal(1,
+                "SIGNATURE FAIL: %s addr=0x%08h exp=0x%08h act=0x%08h",
+                test_name, addr, expected, actual
+            );
+        end
+        $display("SIGNATURE PASS: %s addr=0x%08h data=0x%08h",
+                test_name, addr, actual);
     endtask
 endmodule

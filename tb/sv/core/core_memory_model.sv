@@ -32,4 +32,11 @@ module core_memory_model(
     
     assign mem.imem_rdata = imem[mem.imem_addr[9:2]];
     assign mem.dmem_rdata = mem.dmem_read ? dmem[mem.dmem_addr[9:2]] : 32'b0;
+
+    task automatic peek_word(
+        input logic [31:0] addr,
+        output logic [31:0] data
+    );
+        data = dmem[addr[9:2]];
+    endtask
 endmodule

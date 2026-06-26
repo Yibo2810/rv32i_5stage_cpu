@@ -15,6 +15,13 @@ interface core_mem_if(
   logic [3:0]  dmem_wstrb;
   logic [31:0] dmem_rdata;
 
+  clocking cb @(posedge clk);
+      default input #1step;
+      input  imem_addr, imem_rdata;
+      input  dmem_read, dmem_write, dmem_addr, dmem_wdata, dmem_wstrb, dmem_rdata;
+      input rst;
+  endclocking
+
   modport core (
     input  clk,
     input  rst,
@@ -42,6 +49,7 @@ interface core_mem_if(
   );
 
   modport monitor (
+    clocking cb,
     input clk,
     input rst,
     input imem_addr,
@@ -54,4 +62,7 @@ interface core_mem_if(
     input dmem_rdata
   );
 
+  modport tb (
+    clocking cb
+  );
 endinterface
