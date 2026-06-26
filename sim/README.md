@@ -2,11 +2,27 @@
 
 Generated simulation artifacts are written under `sim/build/`.
 
-The current single-cycle runner creates:
+The v0.3.0 primary flow is the VCS SystemVerilog core regression:
 
-- `sim/build/asm/` for preprocessed assembly, object files, raw binaries, and disassembly dumps.
-- `sim/build/logs/` for per-test simulation logs.
-- `sim/build/waves/` for per-test VCD waveforms.
-- `sim/build/single_cycle.vvp` for the compiled Icarus Verilog simulation image.
+```sh
+./scripts/asm_to_hex.sh
+./tools/rv32i_ref.py --all
+make run
+```
 
-These files are generated outputs and are ignored by Git.
+Generated directories include:
+
+- `sim/build/asm/` for preprocessed assembly, object files, raw binaries, and
+  disassembly dumps.
+- `sim/build/core_vcs/` for the VCS executable, compile log, run log, and C
+  source build directory.
+
+Source-controlled verification artifacts live outside `sim/build/`:
+
+- `programs/asm/*.S`
+- `programs/hex/*.hex`
+- `programs/expected/*.expected`
+- `tb/sv/core/*.sv`
+- `tools/rv32i_ref.py`
+
+`sim/build/` is generated output and should stay ignored by Git.

@@ -33,9 +33,11 @@ package core_verif_pkg;
     typedef struct {
         string          name;
         string          hex_path;
+        string          expected_path;
         int unsigned    max_cycles;
         core_mem_expect_t expected_txns[$];
         core_sig_expect_t expected_sigs[$];
+        logic [3:0]     imem_pc;
     } core_test_case_t;
 
     

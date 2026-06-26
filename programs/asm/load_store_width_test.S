@@ -28,6 +28,6 @@ load_store_width_test:
   lhu  x2, 8(x0)
   sw   x2, 24(x0)
 
-  # LW: read full word 0x89ABCDEF
+  # LW: read full word 0x89ABC0EF
   lw   x2, 0(x0)
   sw   x2, 28(x0)

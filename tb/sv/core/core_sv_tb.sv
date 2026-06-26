@@ -24,13 +24,80 @@ module core_sv_tb;
 
     task automatic check_signatures(input core_test_case_t t);
         logic [31:0] actual_word;
+        logic [31:0] sig_pc;
 
         foreach (t.expected_sigs[i]) begin
             u_memory.peek_word(t.expected_sigs[i].addr, actual_word);
+
+            sig_pc = 32'hdead_beef;
+                foreach (u_monitor.observed_txns[j]) begin
+                    if (u_monitor.observed_txns[j].is_write &&
+                        u_monitor.observed_txns[j].addr == t.expected_sigs[i].addr) begin
+                        sig_pc = u_monitor.observed_txns[j].pc;
+                    end
+                end
+
             u_scoreboard.check_signature_word(
-                t.name, t.expected_sigs[i].addr, t.expected_sigs[i].data, actual_word
+                t.name, t.expected_sigs[i].addr, t.expected_sigs[i].data, actual_word, sig_pc
             );
         end
+    endtask
+
+    task automatic load_expected_file(ref core_test_case_t t);
+        int fd;
+        string line;
+        string tag;
+        string rw;
+        logic [31:0] addr;
+        logic [31:0] data;
+        logic [3:0]  wstrb;
+        int n;
+
+        t.expected_txns.delete();
+        t.expected_sigs.delete();
+
+        fd = $fopen(t.expected_path, "r");
+        if (fd == 0)
+            $fatal(1, "cannot open expected file: %s", t.expected_path);
+
+        while ($fgets(line, fd)) begin
+            tag = "";
+            n = $sscanf(line, "%s", tag);
+
+            if (n != 1)
+                continue;
+
+            if (tag == "#")
+                continue;
+
+            if (tag == "SIG") begin
+                n = $sscanf(line, "%s %h %h", tag, addr, data);
+                if (n != 3)
+                    $fatal(1, "bad SIG line: %s", line);
+
+                t.expected_sigs.push_back('{addr: addr, data: data});
+            end
+            else if (tag == "TXN") begin
+                n = $sscanf(line, "%s %s %h %h %b", tag, rw, addr, data, wstrb);
+                if (n != 5)
+                    $fatal(1, "bad TXN line: %s", line);
+
+                if (rw == "W") begin
+                    t.expected_txns.push_back('{kind: MEM_EXPECT_WRITE, addr: addr, data: data, wstrb: wstrb});
+                end
+                else if (rw == "R") begin
+                    t.expected_txns.push_back('{kind: MEM_EXPECT_READ, addr: addr, data: data, wstrb: wstrb});
+                end
+                else begin
+                    $fatal(1, "bad TXN kind: %s", line);
+                end
+            end
+            else begin
+                $fatal(1, "unknown expected line: %s", line);
+            end
+        end
+
+        $fclose(fd);
     endtask
 
     task automatic run_test(input core_test_case_t t);
@@ -38,6 +105,7 @@ module core_sv_tb;
 
         u_memory.init_mem();
         u_memory.load_hex(t.hex_path);
+        load_expected_file(t);
 
         u_monitor.clear();
 

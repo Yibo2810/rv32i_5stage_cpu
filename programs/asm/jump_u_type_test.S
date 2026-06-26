@@ -17,9 +17,12 @@ jal_dest:
   # JALR: jalr rd, offset(rs1) — PC = rs1+offset, rd = PC+4
   # compute address of jr_dest into x4 via AUIPC
   auipc x4, 0
-  addi  x4, x4, 16
+  addi  x4, x4, 20
   jalr  x3, 0(x4)
   addi  x3, x0, 99
   sw   x3, 12(x0)
+  jal   x0, jr_done
 jr_dest:
   sw   x3, 12(x0)
+
+jr_done:

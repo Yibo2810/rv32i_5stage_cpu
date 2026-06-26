@@ -3,61 +3,81 @@
 This document tracks the RV32I subset currently implemented and verified by the
 single-cycle CPU milestone.
 
-## v0.2.0 R/I Direct-Test Coverage
+## v0.3.0 Verified Single-Cycle Subset
 
-The following instructions are self-checked through the combined
-`control_unit`, `imm_gen`, and `alu` path in `tb/sv/ri_execute_tb.sv`:
+The v0.3.0 release verifies the supported single-cycle RV32I base integer
+datapath with VCS and the SystemVerilog core testbench.
 
 | Group | Instructions | Verification level |
 |---|---|---|
-| R arithmetic | `add`, `sub` | Decode/immediate/execute direct test |
-| R logical | `and`, `or`, `xor` | Decode/immediate/execute direct test |
-| R compare | `slt`, `sltu` | Decode/immediate/execute direct test |
-| R shift | `sll`, `srl`, `sra` | Decode/immediate/execute direct test |
-| I arithmetic/logical | `addi`, `andi`, `ori`, `xori` | Decode/immediate/execute direct test |
-| I compare | `slti`, `sltiu` | Decode/immediate/execute direct test |
-| I shift | `slli`, `srli`, `srai` | Decode/immediate/execute direct test |
+| R arithmetic | `add`, `sub` | Complete single-cycle directed regression |
+| R logical | `and`, `or`, `xor` | Complete single-cycle directed regression |
+| R compare | `slt`, `sltu` | Complete single-cycle directed regression |
+| R shift | `sll`, `srl`, `sra` | Complete single-cycle directed regression |
+| I arithmetic/logical | `addi`, `xori`, `ori`, `andi` | Complete single-cycle directed regression |
+| I compare | `slti`, `sltiu` | Complete single-cycle directed regression |
+| I shift | `slli`, `srli`, `srai` | Complete single-cycle directed regression |
+| Loads | `lb`, `lh`, `lw`, `lbu`, `lhu` | Complete single-cycle directed regression |
+| Stores | `sb`, `sh`, `sw` | Complete single-cycle directed regression |
+| Branches | `beq`, `bne`, `blt`, `bge`, `bltu`, `bgeu` | Complete single-cycle directed regression |
+| Jumps | `jal`, `jalr` | Complete single-cycle directed regression |
+| Upper immediates | `lui`, `auipc` | Complete single-cycle directed regression |
+| Register zero | `x0` write ignored, read returns zero | Complete single-cycle directed regression |
 
-Each case encodes an instruction, checks the decoded control outputs and
-immediate, computes a reference result, and compares it with the ALU result.
+The verification level above means that the instruction is exercised through
+the complete single-cycle core, including instruction fetch, decode, register
+read, immediate generation, execution, memory or PC side effects where
+applicable, writeback, and final signature checking.
 
-This is not yet complete-core integration coverage. Except for the v0.1 subset
-below, these instructions still need assembly programs that exercise register
-read/write, PC sequencing, memory interaction, and writeback through the whole
-single-cycle core.
+## Directed Tests
 
-## v0.1 Verified Single-Cycle Subset
-
-The status below means the instruction has an RTL path and is covered by the
-current directed self-checking single-cycle tests.
-
-| Instruction | Type | v0.1 status | Main datapath effect |
-|---|---|---|---|
-| `add` | R | Verified by `add_test` | `rd = rs1 + rs2` |
-| `sub` | R | Verified by `sub_test` | `rd = rs1 - rs2` |
-| `addi` | I | Verified through all current programs | `rd = rs1 + imm_i` |
-| `lw` | I | Verified by `load_store_test` | `rd = data_memory[rs1 + imm_i]` |
-| `sw` | S | Verified by all current signature tests | `data_memory[rs1 + imm_s] = rs2` |
-| `beq` | B | Verified by `branch_test` | `if (rs1 == rs2) pc = pc + imm_b` |
-
-## Current Test Signatures
-
-| Test | Main instructions exercised | Expected signature |
+| Test | Main instructions or behavior | Expected artifact |
 |---|---|---|
-| `add_test` | `addi`, `add`, `sw` | `dmem[0] = 12` |
-| `sub_test` | `addi`, `sub`, `sw` | `dmem[0] = 5` |
-| `load_store_test` | `addi`, `sw`, `lw` | `dmem[1] = 42` |
-| `branch_test` | `addi`, `beq`, `sw` | `dmem[0] = 1` |
+| `x0_test` | `x0` write protection and read-zero behavior | `programs/expected/x0_test.expected` |
+| `alu_itype_test` | I-type arithmetic, logical, compare, and shift instructions | `programs/expected/alu_itype_test.expected` |
+| `alu_rtype_test` | R-type arithmetic, logical, compare, and shift instructions | `programs/expected/alu_rtype_test.expected` |
+| `load_store_width_test` | Byte, halfword, word stores and signed/unsigned loads | `programs/expected/load_store_width_test.expected` |
+| `branch_matrix_test` | All branch conditions, taken and not-taken | `programs/expected/branch_matrix_test.expected` |
+| `jump_u_type_test` | `lui`, `auipc`, `jal`, and `jalr` | `programs/expected/jump_u_type_test.expected` |
 
-## Deferred After v0.2.0
+## Expected Files
 
-The following RV32I groups remain deferred:
+Expected files use two record types:
 
-- Other branches such as `bne`, `blt`, `bge`, `bltu`, and `bgeu`.
-- Jumps such as `jal` and `jalr`.
-- Upper-immediate instructions such as `lui` and `auipc`.
-- Byte/halfword and signed/unsigned load variants and byte/halfword stores.
-- CSR, trap, interrupt, and privileged behavior.
+```text
+TXN W <addr_hex> <data_hex> <wstrb_bin>
+TXN R <addr_hex> <data_hex> <wstrb_bin>
+SIG <addr_hex> <data_hex>
+```
 
-The R/I operations listed above also remain pending at complete-core integration
-level even though their decode-to-execute direct tests pass.
+- `TXN` records check observed memory transactions.
+- `SIG` records check final architectural signatures in data memory.
+
+The files are generated by:
+
+```sh
+./tools/rv32i_ref.py --all
+```
+
+## Out Of Scope For v0.3.0
+
+The following behavior is intentionally not claimed by this release:
+
+- `fence`
+- `ecall`
+- `ebreak`
+- CSRs and privileged ISA behavior
+- traps, interrupts, and exception return
+- misaligned-access trap handling
+- real bus protocols or wait states
+- five-stage pipeline behavior
+
+These are future architecture decisions, not failures of the v0.3.0
+single-cycle milestone.
+
+## Historical Notes
+
+- v0.1 verified a small single-cycle smoke subset around add/sub/addi/lw/sw/beq.
+- v0.2.0 added SystemVerilog R/I direct module-path verification.
+- v0.3.0 moves the verification claim to complete single-cycle directed
+  regression for the supported RV32I base integer datapath.

@@ -90,15 +90,16 @@ module core_scoreboard;
         input string       test_name,
         input logic [31:0] addr,
         input logic [31:0] expected,
-        input logic [31:0] actual
+        input logic [31:0] actual,
+        input logic [31:0] pc
     );
         if (actual !== expected) begin
             $fatal(1,
-                "SIGNATURE FAIL: %s addr=0x%08h exp=0x%08h act=0x%08h",
-                test_name, addr, expected, actual
+                "SIGNATURE FAIL: %s addr=0x%08h exp=0x%08h act=0x%08h pc=0x%08h",
+                test_name, addr, expected, actual, pc
             );
         end
-        $display("SIGNATURE PASS: %s addr=0x%08h data=0x%08h",
-                test_name, addr, actual);
+        $display("SIGNATURE PASS: %s addr=0x%08h data=0x%08h pc=0x%08h",
+                test_name, addr, actual, pc);
     endtask
 endmodule

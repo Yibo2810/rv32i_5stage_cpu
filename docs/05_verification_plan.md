@@ -2,156 +2,188 @@
 
 ## Current Verification Status
 
-The project has reached **v0.2.0 SystemVerilog R/I direct verification**.
+The project has reached **v0.3.0 verified single-cycle core**.
 
-There are now two directed, self-checking verification levels.
-
-In the original integration flow, assembly programs under `programs/asm/` are
-assembled into `programs/hex/`, loaded into the ideal instruction memory with
-`$readmemh`, executed by `tb/tb_single_cycle.v`, and checked through final
-data-memory signatures. It verifies `add`, `sub`, `addi`, `lw`, `sw`, and `beq`
-through the complete single-cycle core.
-
-The v0.2.0 SystemVerilog flow uses `tb/sv/ri_execute_tb.sv` to directly connect
-and check `control_unit`, `imm_gen`, and `alu`. It verifies these 19 R/I
-operations:
+The active verification flow is a VCS-based SystemVerilog harness:
 
 ```text
-add, sub, and, or, xor, slt, sltu, sll, srl, sra
-addi, andi, ori, xori, slti, sltiu, slli, srli, srai
+programs/asm/*.S
+  -> scripts/asm_to_hex.sh
+  -> programs/hex/*.hex
+  -> tools/rv32i_ref.py
+  -> programs/expected/*.expected
+  -> tb/sv/core/core_sv_tb.sv
+  -> core_memory_model + core_monitor + core_scoreboard
 ```
 
-The R/I test is a real module-path verification milestone, but it is not
-complete-core coverage for all 19 operations. It is also not random
-verification, functional coverage, UVM, or full RV32I verification.
+The regression is self-checking. It compares generated expected memory
+transactions against observed transactions and also checks final data-memory
+signature words.
 
-## R/I Direct Test Design Note
-
-`ri_execute_tb.sv` was intentionally written as a SystemVerilog and verification
-learning exercise. It currently contains instruction encoders, expected-control
-logic, a reference ALU model, stimulus, and checks in one file. This made each
-step visible while learning, but the result is roughly 350 lines and is too
-verbose and tightly coupled for long-term maintenance.
-
-The testbench should later be split into reusable instruction builders,
-reference-model helpers, checkers, and instruction-group test tasks. The current
-form is retained temporarily because its purpose is learning, not establishing
-the final verification architecture.
-
-## Current Directed Tests
-
-| Test | Purpose | Expected check |
-|---|---|---|
-| `add_test` | Check `addi`, register-register `add`, writeback, and store signature | `dmem[0] = 12` |
-| `sub_test` | Check `addi`, register-register `sub`, writeback, and store signature | `dmem[0] = 5` |
-| `load_store_test` | Check effective address generation, `sw`, `lw`, and load writeback | `dmem[1] = 42` |
-| `branch_test` | Check taken `beq`, B-type immediate, and next-PC selection | `dmem[0] = 1` |
-| `ri_directed` | Check R/I instruction encoding, control decode, immediate generation, ALU-control selection, and ALU results | All 19 instruction cases report `PASS` |
-
-## Local Run Flow
-
-Run the full current regression:
-
-```sh
-make all
-```
-
-Run only the single-cycle integration tests:
-
-```sh
-make single
-```
-
-Equivalent direct command:
-
-```sh
-./scripts/run_single_cycle.sh
-```
-
-Run one test:
-
-```sh
-./scripts/run_single_cycle.sh add_test
-```
-
-Run the R/I SystemVerilog direct test:
-
-```sh
-make ri-sv
-```
-
-Regenerate hex files only:
+Validated release command:
 
 ```sh
 ./scripts/asm_to_hex.sh
+./tools/rv32i_ref.py --all
+make run
 ```
 
-The run scripts compile the RTL and testbenches with Verilator and invoke the
-generated simulation executables with plusargs such as:
+Release result:
 
 ```text
-+HEX=programs/hex/add_test.hex
-+EXPECT_ADDR=0
-+EXPECT_VALUE=0000000c
+ALL CORE SV TESTS PASSED
 ```
 
-In actual command-line form these are passed as `+HEX=...`, `+EXPECT_ADDR=...`,
-and `+EXPECT_VALUE=...`.
+## Testbench Architecture
 
-## GitHub Actions Flow
+| File | Responsibility |
+|---|---|
+| `core_verif_pkg.sv` | Shared verification data structures |
+| `core_test_db.sv` | Test metadata database |
+| `core_mem_if.sv` | Instruction/data memory interface |
+| `core_memory_model.sv` | Unified instruction/data memory model |
+| `core_monitor.sv` | Passive transaction monitor |
+| `core_scoreboard.sv` | Expected-vs-observed comparison |
+| `core_assertions.sv` | Assertion scaffold |
+| `core_sv_tb.sv` | Top-level reset, load, run, and check orchestration |
+| `tools/rv32i_ref.py` | Repository-specific reference expected generator |
 
-Remote verification is defined in `.github/workflows/rtl.yml`.
+The intended boundary is:
 
-The workflow installs the RTL/simulation dependencies, runs `asm_to_hex.sh`,
-runs the single-cycle simulation suite, and uploads artifacts:
+- The monitor observes actual behavior.
+- The scoreboard decides pass/fail.
+- The memory model responds to DUT requests and exposes final signatures.
+- The test database describes which tests exist.
+- The reference model predicts expected behavior from generated hex.
 
-- Generated machine-code hex files
-- Preprocessed assembly files
-- Disassembly dumps
-- Simulation logs
-- VCD waveforms
+## Current Directed Tests
 
-## Verilator Compatibility Note
+| Test | Purpose |
+|---|---|
+| `x0_test` | Verify `x0` write protection and read-zero behavior |
+| `alu_itype_test` | Verify complete I-type ALU behavior through the core |
+| `alu_rtype_test` | Verify complete R-type ALU behavior through the core |
+| `load_store_width_test` | Verify byte/halfword/word stores and signed/unsigned loads |
+| `branch_matrix_test` | Verify all RV32I branch conditions, taken and not-taken |
+| `jump_u_type_test` | Verify `lui`, `auipc`, `jal`, and `jalr` |
 
-The earlier register-file and ideal-data-memory models cleared unpacked arrays
-during reset with a `for` loop and nonblocking assignments. That form caused
-problems in the current Verilator-based learning flow. `regfile.sv` and
-`ideal_data_mem.v` were therefore adjusted to remove reset-time array clearing;
-the simulation memory is initialized in an `initial` block where applicable.
+The historical smoke tests and the old direct R/I module-path test are no longer
+the primary release gate. The release gate is the core-level VCS regression in
+`tb/sv/core/`.
 
-The current regression passes with this workaround. It should not be treated as
-a general claim that Verilator cannot support reset loops, nor as the final
-synthesizable reset strategy. Simulator-independent initialization and reset
-semantics remain follow-up work.
+## Checker Strategy
 
-## Near-Term Verification Additions
+### Transaction Check
 
-The next useful tests are still directed tests:
+The monitor records memory events. The scoreboard compares them against
+generated `TXN` records:
 
-- All branch variants, including taken and not-taken behavior.
-- Load/store variants for byte, halfword, word, signed, and unsigned behavior.
-- Complete-core programs for all R/I operations currently covered only by the
-  module-path direct test.
-- `x0_test`: writes to x0 must not change its read value.
-- Reset tests after portable register-file reset semantics are restored.
-- Illegal-instruction and alignment/bounds checks.
-- Refactoring of `ri_execute_tb.sv` into reusable verification components.
+```text
+TXN W <addr> <data> <wstrb>
+TXN R <addr> <data> <wstrb>
+```
 
-## Later Verification Work
+This is useful for memory width, byte mask, load/store, and ordering behavior.
 
-After the single-cycle ISA subset grows, add:
+### Signature Check
 
-- More instruction-group directed tests
-- Lightweight assertions for x0, PC alignment, and memory access assumptions
-- Functional coverage for opcode groups and branch taken/not-taken behavior
-- A simple reference model or ISS comparison for larger programs
-- Constrained-random stimulus only after the supported ISA subset is well-defined
+At the end of a test, the testbench reads data memory through `peek_word()` and
+compares final architectural signatures against `SIG` records:
 
-Pipeline verification should start only after the single-cycle baseline remains
-stable. Later pipeline test areas include:
+```text
+SIG <addr> <data>
+```
 
-- IF/ID/EX/MEM/WB pipeline register behavior
-- Forwarding paths
-- Load-use stalls
-- Branch flush behavior
-- Multi-instruction regression programs
+This is useful for instruction-level architectural results and keeps directed
+programs simple.
+
+## Assertions
+
+The first assertion layer is intentionally lightweight. It should catch
+structural mistakes early without replacing the scoreboard.
+
+Planned assertion areas:
+
+- PC alignment during instruction fetch
+- legal memory byte-enable patterns
+- no unknown values on active memory transactions
+- reset release behavior
+- `x0` invariants where observable
+- mutually consistent memory read/write behavior
+- max-cycle watchdog behavior
+
+## Functional Coverage
+
+The next verification step is coverage, not immediately full random. First
+coverage targets:
+
+| Coverage point | Examples |
+|---|---|
+| opcode family | R/I/load/store/branch/jump/U-type |
+| ALU operation | arithmetic, logical, compare, shift |
+| load width | byte, halfword, word, signed, unsigned |
+| store mask | `0001`, `0010`, `0100`, `1000`, `0011`, `1100`, `1111` |
+| branch condition | BEQ/BNE/BLT/BGE/BLTU/BGEU |
+| branch direction | taken, not-taken |
+| redirect type | PC+4, branch target, JAL, JALR |
+| register zero | read-zero, ignored write |
+
+Coverage answers "what did we exercise?" It does not replace pass/fail checks.
+
+## Constrained-Random Roadmap
+
+Constrained-random should build on the current directed flow:
+
+```text
+seed
+  -> generated assembly
+  -> hex
+  -> rv32i_ref.py expected file
+  -> SV testbench
+  -> scoreboard
+```
+
+Generator constraints should include:
+
+- supported instruction subset
+- initialized source registers
+- bounded data-memory range
+- aligned accesses unless a negative test explicitly targets misalignment
+- bounded branch targets
+- no uncontrolled infinite loops
+- deterministic seed logging
+
+Random tests should be added only when they have an oracle and can be
+reproduced from a seed.
+
+## Five-Stage Pipeline Verification Plan
+
+The current architecture is designed so that much of it survives the transition
+to a pipeline.
+
+Reusable from single-cycle:
+
+- assembly programs
+- generated hex files
+- generated expected files
+- memory model, with minor interface adaptation if needed
+- scoreboard concepts
+- test database structure
+
+Expected pipeline-specific additions:
+
+- commit/retire monitor
+- IF/ID, ID/EX, EX/MEM, MEM/WB pipeline register checks
+- forwarding tests
+- load-use stall tests
+- branch flush tests
+- valid/kill bit assertions
+- pipeline coverage for hazards and redirects
+
+The key rule is:
+
+**scoreboard checks architectural behavior; monitor adapts to the
+microarchitecture.**
+
+That keeps the v0.3.0 verification work useful instead of becoming a disposable
+single-cycle-only testbench.
