@@ -67,6 +67,9 @@ package rv_random_pkg;
         return {imm[20], imm[10:1], imm[11], imm[19:12], rd, opcode};
     endfunction
 
+    function automatic int min(input int a, input int b);
+        return (a < b) ? a : b;
+    endfunction
     `include "tb/sv/core/random/rv_instr.sv"
     `include "tb/sv/core/random/rv_program.sv"
     `include "tb/sv/core/random/rv_ref_model.sv"

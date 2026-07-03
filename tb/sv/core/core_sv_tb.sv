@@ -9,7 +9,13 @@ module core_sv_tb;
     rv_ref_model ref_model;
     int unsigned pass_cnt = 0;
     int unsigned fail_cnt = 0;
-    localparam int NUM_SEEDS = 20;
+    int unsigned num_seeds = 30;
+    int unsigned total_txns = 0;
+    int unsigned total_retired = 0;
+    int          single_seed;
+
+    bit single_seed_mode = 1'b0;
+    localparam int VACUOUS_K = 12;
 
     task automatic apply_reset();
         rst = 1'b1;
@@ -34,11 +40,12 @@ module core_sv_tb;
         return u_scoreboard.check_regfile(name, dut_regs, ref_model.regs);
     endfunction
 
-    task automatic record(input string name, input bit ok);
+    task automatic record(input string name, input int seed, input bit ok);
         if (ok) pass_cnt++;
         else begin
             fail_cnt++;
             $display("  -> FAIL: %s", name);
+            $display("  reproduce: make run ARGS=\"+SINGLE_SEED=%0d\"", seed);
         end
     endtask
 
@@ -60,27 +67,51 @@ module core_sv_tb;
         apply_reset();
         run_until_pc(prog_bytes, 4000);
 
+        total_retired += ref_model.retired;
+        total_txns += ref_model.expected_txns.size();
+
         ok &= u_scoreboard.check(nm, ref_model.expected_txns, u_monitor.observed_txns);
         ok &= check_final_regs(nm);
-        record(nm, ok);
+        record(nm, seed, ok);
     endtask
 
     initial begin
         clk = 0;
         rst = 1;
-        always #5 clk = ~clk;
-        for (int s = 1; s <= NUM_SEEDS; s++)
-            run_random_test(s);
+        void'($value$plusargs("NUM_SEEDS=%0d", num_seeds));
+        if ($value$plusargs("SINGLE_SEED=%0d", single_seed)) begin
+            single_seed_mode = 1'b1;
+            $display("RANDOM TEST: running single seed %0d", single_seed);
+            run_random_test(single_seed);
+        end
+        else begin
+            $display("RANDOM TEST: running %0d seeds", num_seeds);
+            for (int s = 0; s < num_seeds; s++) begin
+                $display("RANDOM TEST: running seed %0d", s);
+                run_random_test(s);
+            end
+        end
 
         $display("========================================");
-        $display("SUMMARY: %0d passed, %0d failed (total %0d)",
-                 pass_cnt, fail_cnt, pass_cnt + fail_cnt);
+        $display("SUMMARY: %0d passed, %0d failed | total_txns=%0d, total_retired=%0d",
+                 pass_cnt, fail_cnt, total_txns, total_retired);
         $display("========================================");
         if (fail_cnt != 0)
             $fatal(1, "RANDOM REGRESSION FAILED: %0d/%0d", fail_cnt, pass_cnt + fail_cnt);
+        if (single_seed_mode) begin
+            if (VACUOUS_K*total_txns < total_retired)
+                $display("WARN: single seed sparse in memory (txns=%0d retired=%0d)",
+                        total_txns, total_retired);
+        end
+        else if (total_retired == 0 || VACUOUS_K*total_txns < total_retired) begin
+            $fatal(1, "vacuous regression: txns=%0d retired=%0d (density < 1/%0d)",
+                total_txns, total_retired, VACUOUS_K);
+        end
         $display("ALL RANDOM TESTS PASSED");
         $finish;
     end
+
+    always #5 clk = ~clk;
 
     core_mem_if mem_if(
         .clk(clk),

@@ -12,12 +12,12 @@ class rv_program;
         for (int k = 0; k < instr_count; k++) begin
             if (instrs[k].kind inside {INSTR_BEQ, INSTR_BNE, INSTR_BLT, INSTR_BGE, INSTR_BLTU, INSTR_BGEU, INSTR_JAL}) begin
                 int target;
-                target = $urandom_range(instr_count, k+1);
+                target = $urandom_range(min(k+4, instr_count), k+1);
                 instrs[k].imm32 = (target - k) * 4;
             end
             else if (instrs[k].kind == INSTR_JALR) begin
                 int target;
-                target = $urandom_range(instr_count, k+1);
+                target = $urandom_range(min(k+4, instr_count), k+1);
                 instrs[k].rs1   = 5'd0;
                 instrs[k].imm32 = target * 4;
             end
@@ -26,10 +26,6 @@ class rv_program;
 
     function void build(int seed);
         rv_instr t;
-        // 单 seed 可复现:随机源分属两套独立 RNG,两个都要钉死。
-        //   对象 RNG  -> 本方法内 new() 出来的 t 子对象种子(层次化对象播种)
-        //   线程 RNG  -> std::randomize(instr_count) 和 fixup 里的 $urandom_range
-        // 少钉线程 RNG,单独重跑某个 seed 会得到另一个程序 -> 无法复现失败。
         this.srandom(seed);
         process::self().srandom(seed);
         instrs.delete();

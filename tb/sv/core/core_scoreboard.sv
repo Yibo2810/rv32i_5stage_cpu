@@ -21,6 +21,14 @@ module core_scoreboard;
         end
 
         foreach (expected[i]) begin
+            logic [31:0] mask;
+            mask = {
+                {8{expected[i].wstrb[3]}},
+                {8{expected[i].wstrb[2]}},
+                {8{expected[i].wstrb[1]}},
+                {8{expected[i].wstrb[0]}}
+            };
+        
             case (expected[i].kind)
                 MEM_EXPECT_WRITE: begin
                     if (actual[i].is_write !== 1'b1)begin
@@ -32,9 +40,12 @@ module core_scoreboard;
                                 i, expected[i].addr, actual[i].addr, actual[i].pc);
                         errors++;
                     end
-                    if (actual[i].wdata !== expected[i].data) begin
-                        $error("[%0d] WRITE: wdata mismatch, exp=0x%08h, act=0x%08h, pc=0x%08h",
-                                i, expected[i].data, actual[i].wdata, actual[i].pc);
+                    if ((actual[i].wdata & mask) !== (expected[i].data & mask)) begin
+                        $error("[%0d] WRITE: masked wdata mismatch, mask=0x%08h exp=0x%08h act=0x%08h pc=0x%08h",
+                                i, mask,
+                                expected[i].data & mask,
+                                actual[i].wdata & mask,
+                                actual[i].pc);
                         errors++;
                     end
                     if (actual[i].wstrb !== expected[i].wstrb) begin

@@ -29,6 +29,12 @@ class rv_instr;
         (kind inside {INSTR_LW, INSTR_SW}) -> imm32[1:0] == 2'b00;
     }
     
+    constraint kind_dist_c{
+        kind dist { [INSTR_ADD:INSTR_SLTU] :/ 20, [INSTR_ADDI:INSTR_SLTIU] :/ 20, [INSTR_LB:INSTR_LHU] :/ 10, 
+                    [INSTR_SB:INSTR_SW] :/ 10, [INSTR_BEQ:INSTR_BGEU] :/ 10, [INSTR_JAL:INSTR_JALR] :/ 10,
+                    [INSTR_LUI:INSTR_AUIPC] :/ 10};
+    }
+
     function automatic logic [31:0] encode();
         case (kind)
             INSTR_ADD : return encode_r(OPCODE_R_TYPE, 7'b0000000, rs2, rs1, 3'b000, rd);
