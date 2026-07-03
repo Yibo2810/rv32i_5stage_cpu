@@ -14,10 +14,13 @@ interface core_mem_if(
   logic [31:0] dmem_wdata;
   logic [3:0]  dmem_wstrb;
   logic [31:0] dmem_rdata;
+  logic        sys_ecall;
+  logic        sys_ebreak;
 
   clocking cb @(posedge clk);
       default input #1step;
       input  imem_addr, imem_rdata;
+      input  sys_ecall, sys_ebreak;
       input  dmem_read, dmem_write, dmem_addr, dmem_wdata, dmem_wstrb, dmem_rdata;
       input rst;
   endclocking
@@ -27,6 +30,8 @@ interface core_mem_if(
     input  rst,
     input  imem_rdata,
     input  dmem_rdata,
+    output sys_ecall,
+    output sys_ebreak,
     output imem_addr,
     output dmem_read,
     output dmem_write,

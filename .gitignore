@@ -12,7 +12,12 @@ sim/*.log
 programs/hex/*.bin
 programs/hex/*.elf
 
-# Editor and OS files
+# VCS build artifacts
+simv
+simv.daidir/
+csrc/
+ucli.key
+
 .DS_Store
 .vscode/
 .idea/

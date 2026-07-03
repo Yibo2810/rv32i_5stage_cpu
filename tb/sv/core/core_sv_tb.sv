@@ -1,12 +1,15 @@
 `timescale 1ns/1ps
 
-import core_verif_pkg::*;
-import core_test_db_pkg::*;
+import rv_random_pkg::*;
+
 module core_sv_tb;
 
     logic clk;
     logic rst;
-    core_test_case_t tests[$];
+    rv_ref_model ref_model;
+    int unsigned pass_cnt = 0;
+    int unsigned fail_cnt = 0;
+    localparam int NUM_SEEDS = 20;
 
     task automatic apply_reset();
         rst = 1'b1;
@@ -14,124 +17,69 @@ module core_sv_tb;
         @(negedge clk);
         rst = 1'b0;
     endtask
-    
-    task automatic run_cycles(input int unsigned cycles);
-        repeat (cycles) begin
+
+    task automatic run_until_pc(input int unsigned stop_bytes, input int unsigned cap);
+        for (int c = 0; c < cap; c++) begin
             @(mem_if.cb);
+            if (mem_if.cb.imem_addr >= stop_bytes) return;
             @(negedge clk);
         end
+        $error("random: watchdog — PC has remained stuck in the program area (suspected JALR jump gone wild)");
     endtask
 
-    task automatic check_signatures(input core_test_case_t t);
-        logic [31:0] actual_word;
-        logic [31:0] sig_pc;
+    function automatic bit check_final_regs(input string name);
+        logic [31:0] dut_regs[0:31];
+        for (int i = 0; i < 32; i++)
+            dut_regs[i] = u_core.u_regfile.regs[i];
+        return u_scoreboard.check_regfile(name, dut_regs, ref_model.regs);
+    endfunction
 
-        foreach (t.expected_sigs[i]) begin
-            u_memory.peek_word(t.expected_sigs[i].addr, actual_word);
-
-            sig_pc = 32'hdead_beef;
-                foreach (u_monitor.observed_txns[j]) begin
-                    if (u_monitor.observed_txns[j].is_write &&
-                        u_monitor.observed_txns[j].addr == t.expected_sigs[i].addr) begin
-                        sig_pc = u_monitor.observed_txns[j].pc;
-                    end
-                end
-
-            u_scoreboard.check_signature_word(
-                t.name, t.expected_sigs[i].addr, t.expected_sigs[i].data, actual_word, sig_pc
-            );
+    task automatic record(input string name, input bit ok);
+        if (ok) pass_cnt++;
+        else begin
+            fail_cnt++;
+            $display("  -> FAIL: %s", name);
         end
     endtask
 
-    task automatic load_expected_file(ref core_test_case_t t);
-        int fd;
-        string line;
-        string tag;
-        string rw;
-        logic [31:0] addr;
-        logic [31:0] data;
-        logic [3:0]  wstrb;
-        int n;
+    task automatic run_random_test(input int seed);
+        rv_program p = new();
+        string nm = $sformatf("random_seed_%0d", seed);
+        bit ok = 1'b1;
+        int unsigned prog_bytes;
 
-        t.expected_txns.delete();
-        t.expected_sigs.delete();
-
-        fd = $fopen(t.expected_path, "r");
-        if (fd == 0)
-            $fatal(1, "cannot open expected file: %s", t.expected_path);
-
-        while ($fgets(line, fd)) begin
-            tag = "";
-            n = $sscanf(line, "%s", tag);
-
-            if (n != 1)
-                continue;
-
-            if (tag == "#")
-                continue;
-
-            if (tag == "SIG") begin
-                n = $sscanf(line, "%s %h %h", tag, addr, data);
-                if (n != 3)
-                    $fatal(1, "bad SIG line: %s", line);
-
-                t.expected_sigs.push_back('{addr: addr, data: data});
-            end
-            else if (tag == "TXN") begin
-                n = $sscanf(line, "%s %s %h %h %b", tag, rw, addr, data, wstrb);
-                if (n != 5)
-                    $fatal(1, "bad TXN line: %s", line);
-
-                if (rw == "W") begin
-                    t.expected_txns.push_back('{kind: MEM_EXPECT_WRITE, addr: addr, data: data, wstrb: wstrb});
-                end
-                else if (rw == "R") begin
-                    t.expected_txns.push_back('{kind: MEM_EXPECT_READ, addr: addr, data: data, wstrb: wstrb});
-                end
-                else begin
-                    $fatal(1, "bad TXN kind: %s", line);
-                end
-            end
-            else begin
-                $fatal(1, "unknown expected line: %s", line);
-            end
-        end
-
-        $fclose(fd);
-    endtask
-
-    task automatic run_test(input core_test_case_t t);
-        $display("RUN: %s", t.name);
-
+        p.build(seed);
         u_memory.init_mem();
-        u_memory.load_hex(t.hex_path);
-        load_expected_file(t);
+        p.load_imem(u_memory.imem);
+        prog_bytes = p.instrs.size() * 4;
+
+        ref_model = new();
+        ref_model.run_iss(u_memory.imem, p.instrs.size());
 
         u_monitor.clear();
-
         apply_reset();
-        run_cycles(t.max_cycles);
+        run_until_pc(prog_bytes, 4000);
 
-        if (t.expected_txns.size() != 0)
-            u_scoreboard.check(t.name, t.expected_txns, u_monitor.observed_txns);
-
-        check_signatures(t);
-
+        ok &= u_scoreboard.check(nm, ref_model.expected_txns, u_monitor.observed_txns);
+        ok &= check_final_regs(nm);
+        record(nm, ok);
     endtask
-    
-    always #5 clk = ~clk;
 
     initial begin
-    clk = 0;
-    rst = 1;
+        clk = 0;
+        rst = 1;
+        always #5 clk = ~clk;
+        for (int s = 1; s <= NUM_SEEDS; s++)
+            run_random_test(s);
 
-    build_core_test_list(tests);
-
-    foreach (tests[i])
-        run_test(tests[i]);
-
-    $display("ALL CORE SV TESTS PASSED");
-    $finish;
+        $display("========================================");
+        $display("SUMMARY: %0d passed, %0d failed (total %0d)",
+                 pass_cnt, fail_cnt, pass_cnt + fail_cnt);
+        $display("========================================");
+        if (fail_cnt != 0)
+            $fatal(1, "RANDOM REGRESSION FAILED: %0d/%0d", fail_cnt, pass_cnt + fail_cnt);
+        $display("ALL RANDOM TESTS PASSED");
+        $finish;
     end
 
     core_mem_if mem_if(
@@ -149,7 +97,9 @@ module core_sv_tb;
         .dmem_addr(mem_if.dmem_addr),
         .dmem_wdata(mem_if.dmem_wdata),
         .dmem_wstrb(mem_if.dmem_wstrb),
-        .dmem_rdata(mem_if.dmem_rdata)
+        .dmem_rdata(mem_if.dmem_rdata),
+        .sys_ecall(mem_if.sys_ecall),
+        .sys_ebreak(mem_if.sys_ebreak)
     );
 
     core_memory_model u_memory(

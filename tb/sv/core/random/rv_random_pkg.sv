@@ -1,56 +1,14 @@
 package rv_random_pkg;
+    import core_verif_pkg::*;
+    import single_pkg::*;
     typedef enum int {
-        INSTR_ADD,
-        INSTR_SUB,
-        INSTR_AND,
-        INSTR_OR,
-        INSTR_XOR,
-        INSTR_SLL,
-        INSTR_SRL,
-        INSTR_SRA,
-        INSTR_SLT,
-        INSTR_SLTU,
-        INSTR_ADDI,
-        INSTR_ANDI,
-        INSTR_ORI,
-        INSTR_XORI,
-        INSTR_SLLI,
-        INSTR_SRLI,
-        INSTR_SRAI,
-        INSTR_SLTI,
-        INSTR_SLTIU,
-        INSTR_LB,
-        INSTR_LH,
-        INSTR_LW,
-        INSTR_LBU,
-        INSTR_LHU,
-        INSTR_SB,
-        INSTR_SH,
-        INSTR_SW,
-        INSTR_BEQ,
-        INSTR_BNE,
-        INSTR_BLT,
-        INSTR_BGE,
-        INSTR_BLTU,
-        INSTR_BGEU,
-        INSTR_JAL,
-        INSTR_JALR,
-        INSTR_LUI,
-        INSTR_AUIPC,
-        INSTR_ECALL,
-        INSTR_EBREAK
+        INSTR_ADD, INSTR_SUB, INSTR_AND, INSTR_OR, INSTR_XOR, INSTR_SLL,
+        INSTR_SRL, INSTR_SRA, INSTR_SLT, INSTR_SLTU, INSTR_ADDI, INSTR_ANDI, 
+        INSTR_ORI, INSTR_XORI, INSTR_SLLI, INSTR_SRLI, INSTR_SRAI, INSTR_SLTI, 
+        INSTR_SLTIU, INSTR_LB, INSTR_LH, INSTR_LW, INSTR_LBU, INSTR_LHU, INSTR_SB, INSTR_SH, 
+        INSTR_SW, INSTR_BEQ, INSTR_BNE, INSTR_BLT, INSTR_BGE, INSTR_BLTU, INSTR_BGEU, INSTR_JAL, 
+        INSTR_JALR, INSTR_LUI, INSTR_AUIPC, INSTR_ECALL, INSTR_EBREAK
     } instr_kind_e;
-
-    localparam logic [6:0] OPCODE_R_TYPE = 7'b0110011;
-    localparam logic [6:0] OPCODE_I_TYPE = 7'b0010011;
-    localparam logic [6:0] OPCODE_LOAD   = 7'b0000011;
-    localparam logic [6:0] OPCODE_STORE  = 7'b0100011;
-    localparam logic [6:0] OPCODE_BRANCH = 7'b1100011;
-    localparam logic [6:0] OPCODE_JAL    = 7'b1101111;
-    localparam logic [6:0] OPCODE_JALR   = 7'b1100111;
-    localparam logic [6:0] OPCODE_LUI    = 7'b0110111;
-    localparam logic [6:0] OPCODE_AUIPC  = 7'b0010111;
-    localparam logic [6:0] OPCODE_SYSTEM  = 7'b1110011;
 
     function automatic logic [31:0] encode_r(
         input logic [6:0] opcode,
@@ -108,4 +66,8 @@ package rv_random_pkg;
     );
         return {imm[20], imm[10:1], imm[11], imm[19:12], rd, opcode};
     endfunction
+
+    `include "tb/sv/core/random/rv_instr.sv"
+    `include "tb/sv/core/random/rv_program.sv"
+    `include "tb/sv/core/random/rv_ref_model.sv"
 endpackage

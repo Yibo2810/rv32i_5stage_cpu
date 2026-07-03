@@ -18,7 +18,9 @@ module control_unit(
     output logic          load_unsigned,
     output logic          jump_and_link,
     output alu_src_a_sel_e alu_src_a_sel,
-    output pc_target_sel_e pc_target_sel
+    output pc_target_sel_e pc_target_sel,
+    output logic          sys_ecall,
+    output logic          sys_ebreak
 );
     typedef enum logic [1:0] {
         ALU_OP_ADD    = 2'b00,
@@ -34,6 +36,8 @@ module control_unit(
     logic       illegal_main;
     logic       illegal_alu;
 
+    logic [4:0] rs1_field = instr[19:15]; //ecall and ebreak use rs1=0
+    logic [4:0] rd_field  = instr[11:7];
 
     assign opcode = instr[6:0];
     assign funct7 = instr[31:25];
@@ -152,6 +156,20 @@ module control_unit(
                 alu_op    = ALU_OP_ADD;
                 alu_src_a_sel = ALU_A_PC;
             end
+
+            OPCODE_SYSTEM : begin
+                imm_sel   = IMM_NONE;
+                reg_write = 1'b0;
+                if (funct3 == FUNCT3_ECALL_EBREAK && rs1_field == 5'b0 && rd_field == 5'b0) begin
+                    case (instr[31:20])
+                        12'h000 : sys_ecall  = 1'b1;
+                        12'h001 : sys_ebreak = 1'b1;
+                        default : illegal_main = 1'b1;
+                    endcase
+                end else begin
+                    illegal_main = 1'b1;
+                end
+            end
             default: illegal_main = 1'b1;
         endcase
     end
@@ -217,16 +235,6 @@ module control_unit(
                             default     : illegal_alu = 1'b1;
                         endcase
                     end
-
-                /*    FUNCT3_SYSTEM : begin
-                        case (funct7)
-                            FUNCT7_ECALL : begin alu_ctrl = ALU_ADD; illegal_alu = 1'b0; end
-                            FUNCT7_EBREAK: begin alu_ctrl = ALU_ADD; illegal_alu = 1'b0; end
-                            default      : illegal_alu = 1'b1;
-                        endcase
-                    end
-                    default: illegal_alu = 1'b1;
-                */
                 endcase
             end
 

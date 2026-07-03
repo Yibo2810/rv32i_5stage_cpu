@@ -26,7 +26,7 @@ module load_store_unit(
 
         case (mem_size)
             MEM_BYTE: begin
-                mem_wdata = {24'b0, store_data[7:0]} << (addr_offset * 8);
+                mem_wdata = {4{store_data[7:0]}};
                 mem_wstrb = 4'b0001 << addr_offset;
                 load_data_reg = mem_rdata >> (addr_offset * 8);
                 load_data = load_unsigned ? {24'b0, load_data_reg[7:0]} : {{24{load_data_reg[7]}}, load_data_reg[7:0]};
@@ -34,7 +34,7 @@ module load_store_unit(
             end
 
             MEM_HALF: begin
-                mem_wdata = {16'b0, store_data[15:0]} << (addr_offset * 8);
+                mem_wdata = {2{store_data[15:0]}};
                 misaligned = addr_offset[0];
                 mem_wstrb = misaligned ? 4'b0000 : (4'b0011 << addr_offset);
                 load_data_reg = mem_rdata >> (addr_offset * 8);

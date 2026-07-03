@@ -1,8 +1,8 @@
 +incdir+rtl/include
++incdir+tb/sv/core/random
 
 rtl/include/single_pkg.sv
 tb/sv/core/core_verif_pkg.sv
-tb/sv/core/core_test_db.sv
 tb/sv/core/core_mem_if.sv
 
 rtl/single_cycle/pc.v
@@ -18,4 +18,6 @@ tb/sv/core/core_memory_model.sv
 tb/sv/core/core_monitor.sv
 tb/sv/core/core_assertions.sv
 tb/sv/core/core_scoreboard.sv
+tb/sv/core/random/rv_random_pkg.sv
+tb/sv/core/random/rv_coverage.sv
 tb/sv/core/core_sv_tb.sv

@@ -9,6 +9,7 @@ build:
 	vcs \
 	  -full64 \
 	  -sverilog \
+	  -debug_access+all \
 	  -top core_sv_tb \
 	  -f $(FILELIST) \
 	  -Mdir=$(BUILD_DIR)/csrc \
@@ -16,4 +17,4 @@ build:
 	  -l $(BUILD_DIR)/compile.log
 
 run: build
-	./$(SIMV) -l $(BUILD_DIR)/run.log
+	./$(SIMV) $(ARGS) -l $(BUILD_DIR)/run.log

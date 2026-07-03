@@ -15,7 +15,9 @@ module core_single_cycle(
     output logic [31:0] dmem_addr,
     output logic [31:0] dmem_wdata,
     output logic [3:0]  dmem_wstrb,
-    input logic [31:0] dmem_rdata
+    input logic [31:0] dmem_rdata,
+    output logic sys_ecall,
+    output logic sys_ebreak
 );
 
     // 1. logics
@@ -148,7 +150,9 @@ module core_single_cycle(
         .illegal_instr(illegal_instr),
         .jump_and_link(jump_and_link),
         .pc_target_sel(pc_target_sel),
-        .alu_src_a_sel(alu_src_a_sel)
+        .alu_src_a_sel(alu_src_a_sel),
+        .sys_ecall(sys_ecall),
+        .sys_ebreak(sys_ebreak)
     );
 
     load_store_unit u_lsu (

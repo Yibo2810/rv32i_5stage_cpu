@@ -66,8 +66,6 @@ package single_pkg;
   localparam logic [6:0] FUNCT7_SLLI = 7'b0000000;
   localparam logic [6:0] FUNCT7_SRLI = 7'b0000000;
   localparam logic [6:0] FUNCT7_SRAI = 7'b0100000;
-  localparam logic [6:0] FUNCT7_ECALL = 7'b0000000;
-  localparam logic [6:0] FUNCT7_EBREAK = 7'b0000001;
 
   typedef enum logic [3:0] {
     ALU_ADD  = 4'b0000,
