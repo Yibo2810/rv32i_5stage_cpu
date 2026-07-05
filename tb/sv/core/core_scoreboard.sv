@@ -120,20 +120,14 @@ module core_scoreboard;
         return 1'b1;
     endfunction
 
-    function automatic bit check_signature_word(
-        input string       test_name,
-        input logic [31:0] addr,
-        input logic [31:0] expected,
-        input logic [31:0] actual,
-        input logic [31:0] pc
+    function automatic bit check_retire(
+        input string       name,
+        input int unsigned dut_n, iss_n,
+        input logic [31:0] dut_pc, iss_pc
     );
-        if (actual !== expected) begin
-            $display("SIGNATURE FAIL: %s addr=0x%08h exp=0x%08h act=0x%08h pc=0x%08h",
-                test_name, addr, expected, actual, pc);
-            return 1'b0;
-        end
-        $display("SIGNATURE PASS: %s addr=0x%08h data=0x%08h pc=0x%08h",
-                test_name, addr, actual, pc);
-        return 1'b1;
+        bit ok = 1'b1;
+        if (dut_n  !== iss_n)  begin $error("%s RETIRED  dut=%0d iss=%0d",         name, dut_n,  iss_n);  ok = 0; end
+        if (dut_pc !== iss_pc) begin $error("%s FINAL-PC dut=0x%08h iss=0x%08h",   name, dut_pc, iss_pc); ok = 0; end
+        return ok;
     endfunction
 endmodule

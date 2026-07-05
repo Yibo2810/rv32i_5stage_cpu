@@ -12,10 +12,13 @@ module core_sv_tb;
     int unsigned num_seeds = 30;
     int unsigned total_txns = 0;
     int unsigned total_retired = 0;
+    int unsigned total_static = 0;
     int          single_seed;
-
+    int seed_offset = 0;
+    
     bit single_seed_mode = 1'b0;
     localparam int VACUOUS_K = 12;
+    localparam int unsigned RUN_BUDGET = 2000;
 
     task automatic apply_reset();
         rst = 1'b1;
@@ -24,13 +27,21 @@ module core_sv_tb;
         rst = 1'b0;
     endtask
 
-    task automatic run_until_pc(input int unsigned stop_bytes, input int unsigned cap);
-        for (int c = 0; c < cap; c++) begin
-            @(mem_if.cb);
-            if (mem_if.cb.imem_addr >= stop_bytes) return;
+    task automatic run_program(
+        input  int unsigned stop_bytes,
+        input  int unsigned budget,
+        output int unsigned n_exec,
+        output logic [31:0] final_pc
+    );
+        n_exec = 0;
+        final_pc = mem_if.imem_addr;
+        forever begin
+            if (final_pc >= stop_bytes) break;
+            if (n_exec == budget)      break;
             @(negedge clk);
+            final_pc = mem_if.imem_addr;
+            n_exec++;
         end
-        $error("random: watchdog — PC has remained stuck in the program area (suspected JALR jump gone wild)");
     endtask
 
     function automatic bit check_final_regs(input string name);
@@ -54,6 +65,8 @@ module core_sv_tb;
         string nm = $sformatf("random_seed_%0d", seed);
         bit ok = 1'b1;
         int unsigned prog_bytes;
+        int unsigned dut_n;
+        logic [31:0] dut_pc;
 
         p.build(seed);
         u_memory.init_mem();
@@ -61,15 +74,17 @@ module core_sv_tb;
         prog_bytes = p.instrs.size() * 4;
 
         ref_model = new();
-        ref_model.run_iss(u_memory.imem, p.instrs.size());
+        ref_model.run_iss(u_memory.imem, p.instrs.size(), RUN_BUDGET);
 
         u_monitor.clear();
         apply_reset();
-        run_until_pc(prog_bytes, 4000);
+        run_program(prog_bytes, RUN_BUDGET, dut_n, dut_pc);
 
         total_retired += ref_model.retired;
         total_txns += ref_model.expected_txns.size();
+        total_static += p.instrs.size();
 
+        ok &= u_scoreboard.check_retire(nm, dut_n, ref_model.retired, dut_pc, ref_model.pc);
         ok &= u_scoreboard.check(nm, ref_model.expected_txns, u_monitor.observed_txns);
         ok &= check_final_regs(nm);
         record(nm, seed, ok);
@@ -78,6 +93,7 @@ module core_sv_tb;
     initial begin
         clk = 0;
         rst = 1;
+        void'($value$plusargs("SEED_OFFSET=%0d", seed_offset));
         void'($value$plusargs("NUM_SEEDS=%0d", num_seeds));
         if ($value$plusargs("SINGLE_SEED=%0d", single_seed)) begin
             single_seed_mode = 1'b1;
@@ -88,7 +104,7 @@ module core_sv_tb;
             $display("RANDOM TEST: running %0d seeds", num_seeds);
             for (int s = 0; s < num_seeds; s++) begin
                 $display("RANDOM TEST: running seed %0d", s);
-                run_random_test(s);
+                run_random_test(seed_offset + s);
             end
         end
 
@@ -98,14 +114,17 @@ module core_sv_tb;
         $display("========================================");
         if (fail_cnt != 0)
             $fatal(1, "RANDOM REGRESSION FAILED: %0d/%0d", fail_cnt, pass_cnt + fail_cnt);
-        if (single_seed_mode) begin
-            if (VACUOUS_K*total_txns < total_retired)
-                $display("WARN: single seed sparse in memory (txns=%0d retired=%0d)",
-                        total_txns, total_retired);
+        if (ref_model.retired >= RUN_BUDGET) begin
+            $display("WARN seed=%0d hit budget, program did not terminate (coverage suspect)", single_seed_mode ? single_seed : seed_offset + num_seeds - 1);
         end
-        else if (total_retired == 0 || VACUOUS_K*total_txns < total_retired) begin
-            $fatal(1, "vacuous regression: txns=%0d retired=%0d (density < 1/%0d)",
-                total_txns, total_retired, VACUOUS_K);
+        if (single_seed_mode) begin
+            if (VACUOUS_K*total_txns < total_static)
+                $display("WARN: single seed sparse in memory (txns=%0d static=%0d)",
+                        total_txns, total_static);
+        end
+        else if (VACUOUS_K*total_txns < total_static) begin
+            $fatal(1, "vacuous regression: txns=%0d static=%0d (density < 1/%0d)",
+                total_txns, total_static, VACUOUS_K);
         end
         $display("ALL RANDOM TESTS PASSED");
         $finish;

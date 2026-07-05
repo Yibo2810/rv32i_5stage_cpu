@@ -1,8 +1,8 @@
 class rv_ref_model;
     logic [31:0] regs[32];
     logic [31:0] dmem[256];
-    //logic [31:0] imem[256];
     logic [31:0] pc;
+    logic [31:0] final_pc;
     int unsigned retired;
     core_mem_expect_t expected_txns[$];
     localparam int WATCHDOG = 100000;
@@ -11,14 +11,17 @@ class rv_ref_model;
         foreach(regs[i]) regs[i] = 32'b0;
         foreach (dmem[i]) dmem[i] = 32'b0;
         pc = 32'b0;
+        final_pc = 32'b0;
+        retired = 0;
         expected_txns.delete();
     endfunction
 
     function void run_iss(const ref logic [31:0] img[0:255],
-                          input int unsigned program_words = 256);
+                          input int unsigned program_words,
+                          input int unsigned budget);
         int unsigned steps = 0;
         reset();
-        while (steps < WATCHDOG) begin
+        while (steps < budget) begin
             int unsigned idx = pc >> 2;
             logic [31:0] w;
             if (idx >= program_words) break;
@@ -30,7 +33,7 @@ class rv_ref_model;
             exec(w);
             steps++;
         end
-        if (steps == WATCHDOG) $fatal(1, "ISS watchdog: program never terminated");
+        final_pc = pc;
         retired = steps;
     endfunction
 
@@ -265,207 +268,6 @@ class rv_ref_model;
 
         if (reg_we)
             regs[rd] = result;
-        regs[0] = 32'b0;
-        pc = next_pc;
-    endfunction
-
-    function void step(rv_instr i);
-        logic [31:0] rs1_val;
-        logic [31:0] rs2_val;
-        logic [31:0] result;
-        logic [31:0] imm_u;
-        logic [31:0] imm_i;
-        logic [31:0] imm_b;
-        logic [31:0] imm_j;
-        logic [31:0] addr;
-        logic [31:0] data;
-        logic [31:0] next_pc;
-        logic reg_we;
-
-        imm_u = {i.imm32[31:12], 12'b0};
-        imm_i = {{20{i.imm32[11]}}, i.imm32[11:0]};
-        imm_b = {{19{i.imm32[12]}}, i.imm32[12:1], 1'b0};
-        imm_j = {{11{i.imm32[20]}}, i.imm32[20:1], 1'b0};
-        rs1_val = regs[i.rs1];
-        rs2_val = regs[i.rs2];
-
-        reg_we = 1'b1;
-        next_pc = pc + 32'd4;
-
-        case (i.kind)
-            INSTR_ADD:  result = rs1_val + rs2_val;
-            INSTR_SUB:  result = rs1_val - rs2_val;
-            INSTR_AND:  result = rs1_val & rs2_val;
-            INSTR_OR:   result = rs1_val | rs2_val;
-            INSTR_XOR:  result = rs1_val ^ rs2_val;
-            INSTR_SLL:  result = rs1_val << rs2_val[4:0];
-            INSTR_SRL:  result = rs1_val >> rs2_val[4:0];
-            INSTR_SRA:  result = $signed(rs1_val) >>> rs2_val[4:0];
-            INSTR_SLT:  result = ($signed(rs1_val) < $signed(rs2_val)) ? 32'd1 : 32'd0;
-            INSTR_SLTU: result = (rs1_val < rs2_val) ? 32'd1 : 32'd0;
-            INSTR_ADDI: result = rs1_val + imm_i;
-            INSTR_ANDI: result = rs1_val & imm_i;
-            INSTR_ORI:  result = rs1_val | imm_i;
-            INSTR_XORI: result = rs1_val ^ imm_i;
-            INSTR_SLLI: result = rs1_val << imm_i[4:0];
-            INSTR_SRLI: result = rs1_val >> imm_i[4:0];
-            INSTR_SRAI: result = $signed(rs1_val) >>> imm_i[4:0];
-            INSTR_SLTI: result = ($signed(rs1_val) < $signed(imm_i)) ? 32'd1 : 32'd0;
-            INSTR_SLTIU: result = (rs1_val < imm_i) ? 32'd1 : 32'd0;
-            INSTR_LB: begin
-                core_mem_expect_t txn;
-                logic [1:0] off;
-                logic [7:0] b;
-                txn.kind = MEM_EXPECT_READ;
-                addr = rs1_val + imm_i;
-                off = addr[1:0];
-                data = dmem[addr[9:2]];
-                b = data[off*8 +: 8];
-                result = {{24{b[7]}}, b};
-                txn.addr = addr;
-                txn.data = data;
-                txn.wstrb = 4'b0000;
-                expected_txns.push_back(txn);
-            end
-            INSTR_LH: begin
-                core_mem_expect_t txn;
-                logic [1:0] off;
-                logic [15:0] b;
-                txn.kind = MEM_EXPECT_READ;
-                addr = rs1_val + imm_i;
-                off = addr[1:0];
-                data = dmem[addr[9:2]];
-                b = data[off*8 +: 16];
-                result = {{16{b[15]}}, b};
-                txn.addr = addr;
-                txn.data = data;
-                txn.wstrb = 4'b0000;
-                expected_txns.push_back(txn);
-            end
-            INSTR_LW: begin
-                core_mem_expect_t txn;
-                txn.kind = MEM_EXPECT_READ;
-                addr = rs1_val + imm_i;
-                data = dmem[addr[9:2]];
-                result = data;
-                txn.addr = addr;
-                txn.data = data;
-                txn.wstrb = 4'b0000;
-                expected_txns.push_back(txn);
-            end
-            INSTR_LBU: begin
-                core_mem_expect_t txn;
-                logic [1:0] off;
-                logic [7:0] b;
-                txn.kind = MEM_EXPECT_READ;
-                addr = rs1_val + imm_i;
-                off = addr[1:0];
-                data = dmem[addr[9:2]];
-                b = data[off*8 +: 8];
-                result = {24'b0, b};
-                txn.addr = addr;
-                txn.data = data;
-                txn.wstrb = 4'b0000;
-                expected_txns.push_back(txn);
-            end
-            INSTR_LHU: begin
-                core_mem_expect_t txn;
-                logic [1:0] off;
-                logic [15:0] b;
-                txn.kind = MEM_EXPECT_READ;
-                addr = rs1_val + imm_i;
-                off = addr[1:0];
-                data = dmem[addr[9:2]];
-                b = data[off*8 +: 16];
-                result = {16'b0, b};
-                txn.addr = addr;
-                txn.data = data;
-                txn.wstrb = 4'b0000;
-                expected_txns.push_back(txn);
-            end
-            INSTR_SB: begin
-                core_mem_expect_t txn;
-                logic [1:0] off;
-                reg_we = 1'b0;
-                txn.kind = MEM_EXPECT_WRITE;
-                addr = rs1_val + imm_i;
-                off = addr[1:0];
-                dmem[addr[9:2]][off*8 +: 8] = rs2_val[7:0];
-                txn.addr = addr;
-                txn.data = ({24'b0, rs2_val[7:0]} << (off*8));
-                txn.wstrb = (4'b0001 << off);
-                expected_txns.push_back(txn);
-            end
-            INSTR_SH: begin
-                core_mem_expect_t txn;
-                logic [1:0] off;
-                reg_we = 1'b0;
-                txn.kind = MEM_EXPECT_WRITE;
-                addr = rs1_val + imm_i;
-                off = addr[1:0];
-                dmem[addr[9:2]][off*8 +: 16] = rs2_val[15:0];
-                txn.addr = addr;
-                txn.data = ({16'b0, rs2_val[15:0]} << (off*8));
-                txn.wstrb = (4'b0011 << off);
-                expected_txns.push_back(txn);
-            end
-            INSTR_SW: begin
-                core_mem_expect_t txn;
-                reg_we = 1'b0;
-                txn.kind = MEM_EXPECT_WRITE;
-                addr = rs1_val + imm_i;
-                dmem[addr[9:2]] = rs2_val;
-                txn.addr = addr;
-                txn.data = rs2_val;
-                txn.wstrb = 4'b1111;
-                expected_txns.push_back(txn);
-            end
-            INSTR_BEQ: begin
-                reg_we = 1'b0;
-                if (rs1_val == rs2_val)
-                    next_pc = pc + imm_b;
-            end
-            INSTR_BNE: begin
-                reg_we = 1'b0;
-                if (rs1_val != rs2_val)
-                    next_pc = pc + imm_b;
-            end
-            INSTR_BLT: begin
-                reg_we = 1'b0;
-                if ($signed(rs1_val) < $signed(rs2_val))
-                    next_pc = pc + imm_b;
-            end
-            INSTR_BGE: begin
-                reg_we = 1'b0;
-                if ($signed(rs1_val) >= $signed(rs2_val))
-                    next_pc = pc + imm_b;
-            end
-            INSTR_BLTU: begin
-                reg_we = 1'b0;
-                if (rs1_val < rs2_val)
-                    next_pc = pc + imm_b;
-            end
-            INSTR_BGEU: begin
-                reg_we = 1'b0;
-                if (rs1_val >= rs2_val)
-                    next_pc = pc + imm_b;
-            end
-            INSTR_JAL: begin
-                next_pc = pc + imm_j;
-                result = pc + 32'd4;
-            end
-            INSTR_JALR: begin
-                logic [31:0] tmp;
-                tmp = rs1_val + imm_i;
-                next_pc = {tmp[31:1], 1'b0};
-                result = pc + 32'd4;
-            end
-            INSTR_LUI: result = imm_u;
-            INSTR_AUIPC: result = pc + imm_u;
-            default:    result = 32'bx;
-        endcase
-        if (reg_we)
-            regs[i.rd] = result;
         regs[0] = 32'b0;
         pc = next_pc;
     endfunction

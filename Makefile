@@ -17,4 +17,4 @@ build:
 	  -l $(BUILD_DIR)/compile.log
 
 run: build
-	./$(SIMV) $(ARGS) -l $(BUILD_DIR)/run.log
+	./$(SIMV) +SEED_OFFSET=$$(date +%s) $(ARGS) -l $(BUILD_DIR)/run.log
