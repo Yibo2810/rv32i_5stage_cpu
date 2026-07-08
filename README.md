@@ -3,20 +3,23 @@
 A learning-oriented RV32I CPU project implemented in Verilog and
 SystemVerilog.
 
-The project has completed its **v0.3.0 single-cycle verification milestone**.
-The current release focuses on a complete single-cycle RV32I integer datapath
-for the supported base instructions, a reusable SystemVerilog verification
-harness, VCS simulation, directed assembly regressions, and generated expected
-results. The next major phase is constrained-random verification and development
-of a classic five-stage pipeline.
+The project has completed its **v0.4.0 constrained-random verification
+milestone**. The single-cycle RV32I core is now verified by a seed-reproducible
+constrained-random regression checked against an in-testbench ISS reference
+model, guarded by concurrent assertions, and measured by a functional coverage
+model closed to 100% of its defined bins — all running under VCS. The next
+major phase is the classic five-stage pipeline.
 
 ## Current Milestone
 
-**v0.3.0: verified single-cycle core**
+**v0.4.0: constrained-random verification freeze**
+(see [docs/09_v0_4_0_milestone.md](docs/09_v0_4_0_milestone.md))
 
-This release promotes the single-cycle core from a small smoke-test baseline to
-a broader core-level directed regression. The RTL supports and the VCS
-SystemVerilog regression verifies:
+Each random seed builds a structured program (straight-line code, bounded
+loops, forward branches with controlled outcomes, JALR blocks, store→load
+pairs), runs it on the RTL and an ISS in lockstep, and compares the full
+memory transaction stream, the final register file, and the retire
+count/final PC. The supported and verified instruction subset:
 
 ```text
 add, sub, and, or, xor, slt, sltu, sll, srl, sra
@@ -26,14 +29,19 @@ beq, bne, blt, bge, bltu, bgeu
 jal, jalr, lui, auipc
 ```
 
-The release also verifies important architectural behavior such as `x0` write
-protection, branch taken/not-taken behavior, byte/halfword memory masks, signed
-and unsigned loads, jump redirects, upper immediates, and final data-memory
-signatures.
+The regression also verifies architectural corner behavior such as `x0` write
+protection, all 12 branch kind × taken/not-taken combinations in both
+directions, byte/halfword write strobes on every lane, signed and unsigned
+load extension with real (non-zero) data, jump redirects, and upper
+immediates.
 
-System and environment instructions such as `fence`, `ecall`, and `ebreak` are
-not part of this milestone. They are intentionally deferred until the project
-has a clearer exception/trap model.
+System and environment instructions such as `fence`, `ecall`, and `ebreak`
+are not part of this milestone. The decoder's `ecall`/`ebreak` trap flags are
+assertion-guarded against spurious assertion, but the instructions themselves
+are deferred until the project has a trap/exception model. The most
+instructive bugs found on the way — including two RTL bugs that survived
+fully green regressions — are documented in
+[docs/10_bug_case_library.md](docs/10_bug_case_library.md).
 
 ## Status
 
@@ -48,29 +56,44 @@ has a clearer exception/trap model.
 - [x] Directed assembly tests for R-type ALU, I-type ALU, load/store widths, branches, jumps, upper immediates, and `x0`
 - [x] Python reference model for generated `TXN` and `SIG` expected files
 - [x] Core-level directed regression passing under VCS
-- [ ] Constrained-random program generation
-- [ ] Functional coverage closure
+- [x] Constrained-random program generator with structured streams and seed reproduction
+- [x] In-testbench ISS reference model in lockstep with the RTL
+- [x] Concurrent assertion set (15 properties) with failure-count regression gating
+- [x] Functional coverage model (instruction, memory, control-flow) closed to 100% of defined bins
+- [x] Code coverage collection scoped to the core with documented exclusions
 - [ ] Commit/retire monitor for pipeline-friendly checking
 - [ ] Five-stage pipeline implementation
 - [ ] Forwarding, hazard detection, stalls, and flushes
 
 ## Verification Summary
 
-Primary release command sequence:
+Primary regression (VCS):
 
 ```sh
-./scripts/asm_to_hex.sh
-./tools/rv32i_ref.py --all
-make run
+make run                          # 200-seed constrained-random regression
+make cov                          # same regression with coverage collection
+python3 scripts/parse_cov.py      # coverage report with per-bin holes
 ```
 
-Validated on `yibo-server` with Synopsys VCS `W-2024.09-SP1`:
+Validated v0.4.0 result:
 
 ```text
-ALL CORE SV TESTS PASSED
+SUMMARY: 200 passed, 0 failed
+ASSERTION FAILURES: 0
+ALL RANDOM TESTS PASSED
+RV_INSTR_COVERAGE  = 100.00%
+RV_MEM_COVERAGE    = 100.00%
+RV_BRANCH_COVERAGE = 100.00%
 ```
 
-The v0.3.0 directed regression contains:
+Every seed is checked on three axes: the full memory transaction stream
+(direction, address, strobes, masked data), the final register file
+`x1..x31`, and retire count/final PC — all against the ISS. A failing seed
+prints its `+SINGLE_SEED` reproduction command. Density and assertion-count
+guards keep the regression from passing vacuously.
+
+The v0.3.0 directed assembly suite is retained as the end-to-end smoke
+baseline (`./scripts/asm_to_hex.sh && ./tools/rv32i_ref.py --all`):
 
 | Test | Main coverage | Checker style |
 |---|---|---|
@@ -83,18 +106,23 @@ The v0.3.0 directed regression contains:
 
 ## Verification Architecture
 
-The release verification flow is intentionally split into stable layers:
+The v0.4.0 random flow is self-contained in SystemVerilog:
 
 ```text
-programs/asm/*.S
-  -> scripts/asm_to_hex.sh
-  -> programs/hex/*.hex
-  -> tools/rv32i_ref.py
-  -> programs/expected/*.expected
-  -> tb/sv/core/core_sv_tb.sv
-  -> core_memory_model + core_monitor + core_scoreboard
-  -> PASS/FAIL from TXN and SIG checks
+rv_program.build(seed)                 constrained-random structured program
+  -> rv_instr.encode()                 instruction encoding
+  -> core_memory_model.imem            shared instruction image
+  -> rv_ref_model.run_iss()            ISS: expected txns / regs / retire
+  -> core_single_cycle (DUT)           executes the same image
+  -> core_monitor                      observed memory transactions
+  -> core_scoreboard                   txn stream + regfile + retire checks
+  -> core_assertions                   15 properties, failure-count gated
+  -> rv_coverage                       execution-side functional coverage
 ```
+
+The v0.3.0 directed assembly flow
+(`programs/asm -> asm_to_hex.sh -> tools/rv32i_ref.py -> expected files`)
+is kept beside it as the smoke baseline.
 
 Important files:
 
@@ -109,43 +137,42 @@ Important files:
 | `tb/sv/core/core_mem_if.sv` | Instruction/data memory interface boundary |
 | `tb/sv/core/core_memory_model.sv` | Unified instruction/data memory model with byte-enable writes and `peek_word` |
 | `tb/sv/core/core_monitor.sv` | Passive capture of observed memory transactions |
-| `tb/sv/core/core_scoreboard.sv` | Expected-vs-observed transaction and signature checks |
-| `tb/sv/core/core_assertions.sv` | Early assertion scaffold for protocol and invariant checks |
+| `tb/sv/core/core_scoreboard.sv` | Transaction-stream, register-file, and retire checks |
+| `tb/sv/core/core_assertions.sv` | 15 concurrent properties; failures gate the regression verdict |
+| `tb/sv/core/random/rv_random_pkg.sv` | Random subsystem package: instruction kinds and encoders |
+| `tb/sv/core/random/rv_instr.sv` | Randomizable instruction class with legality/safety constraints |
+| `tb/sv/core/random/rv_program.sv` | Structured program generator: loops, branches, JALR, store→load pairs |
+| `tb/sv/core/random/rv_ref_model.sv` | ISS reference model (fatals on anything it does not implement) |
+| `tb/sv/core/random/rv_coverage.sv` | Execution-side functional coverage (instruction/memory/control-flow) |
 | `tb/filelists/core_sv.f` | VCS compile filelist |
+| `tb/filelists/cm_hier.config` | Restricts code coverage collection to the core |
+| `scripts/parse_cov.py` | Coverage-database report: per-module metrics and zero-hit bins |
 | `programs/asm/` | Directed assembly tests |
 | `programs/hex/` | Generated instruction-memory images |
 | `programs/expected/` | Generated expected `TXN` and `SIG` files |
 | `tools/rv32i_ref.py` | Small repository-specific RV32I reference model |
 | `docs/` | Architecture, ISA, verification, and milestone notes |
 
-The checker has two levels:
-
-- Transaction checks compare observed memory reads/writes against generated
-  expected `TXN` entries.
-- Signature checks use final data-memory words as architectural test results.
-
-This keeps the verification architecture useful for the future pipeline: the
-test programs, expected files, and scoreboard can stay mostly stable while the
-monitor moves from a single-cycle bus view to a commit/retire view.
+The architecture is deliberately pipeline-ready: the generator, ISS, and
+scoreboard are independent of the core's microarchitecture. Moving to the
+five-stage pipeline mainly means replacing the monitor's single-cycle bus
+view with a commit/retire view.
 
 ## Running The Project
 
-Generate all directed hex programs:
+Build and run the constrained-random regression:
 
 ```sh
-./scripts/asm_to_hex.sh
+make run                              # 200 seeds
+make run ARGS="+SINGLE_SEED=<n>"      # reproduce one failing seed
+make run ARGS="+NUM_SEEDS=<n>"        # change regression size
 ```
 
-Generate all expected files:
+Run with coverage and report it:
 
 ```sh
-./tools/rv32i_ref.py --all
-```
-
-Build and run the VCS regression:
-
-```sh
-make run
+make cov
+python3 scripts/parse_cov.py
 ```
 
 Compile only:
@@ -154,8 +181,10 @@ Compile only:
 make build
 ```
 
-The default `Makefile` builds `core_sv_tb` using `tb/filelists/core_sv.f` and
-writes simulation output under `sim/build/core_vcs/`.
+The `Makefile` builds `core_sv_tb` from `tb/filelists/core_sv.f` and writes
+simulation output and the coverage database under `sim/build/core_vcs/`.
+Directed assembly programs can be regenerated with `./scripts/asm_to_hex.sh`
+and their expected files with `./tools/rv32i_ref.py --all`.
 
 ## Repository Layout
 
@@ -172,6 +201,7 @@ writes simulation output under `sim/build/core_vcs/`.
 │   ├── include/
 │   ├── pipeline/
 │   └── single_cycle/
+├── scripts/
 ├── tb/
 │   ├── filelists/
 │   └── sv/core/
@@ -181,29 +211,35 @@ writes simulation output under `sim/build/core_vcs/`.
 
 ## Known Limitations
 
-- The release verifies the supported RV32I single-cycle datapath with directed
-  tests. It is not yet constrained-random verification or coverage closure.
-- The reference model in `tools/rv32i_ref.py` is a repository-specific oracle for
-  current bare-metal snippets, not a full architectural simulator.
-- `fence`, `ecall`, `ebreak`, privileged behavior, traps, interrupts, CSRs, and
-  real bus wait states are out of scope for v0.3.0.
-- The pipeline files under `rtl/pipeline/` are placeholders for the next phase,
-  not a verified five-stage implementation.
-- The current monitor focuses on memory transactions. A richer commit/retire
-  monitor is planned before serious pipeline verification.
-- The VCS compile log may contain non-fatal package import notes from current
-  source style.
+Documented in detail in
+[docs/09_v0_4_0_milestone.md](docs/09_v0_4_0_milestone.md); the short list:
+
+- `fence`, `ecall`, `ebreak`, privileged behavior, traps, interrupts, CSRs,
+  and real bus wait states are out of scope. The `ecall`/`ebreak` decoder
+  flags are assertion-guarded against spurious assertion, but the
+  instructions are never executed.
+- Illegal-instruction decode paths are not error-injected; random programs
+  contain only legal encodings.
+- Loads/stores are constrained to a safe, aligned data window: non-zero base
+  registers, negative offsets, and misalignment are deferred to the pipeline
+  phase.
+- A few composed corners are not directly stimulated (JALR targets with bit 0
+  set, `JAL` with `rd != x0`, `BGE`/`BGEU` with equal operands); the
+  underlying datapaths are covered through neighboring instructions.
+- The ISS in `rv_ref_model.sv` implements exactly the supported subset and
+  fatals on anything else — it is an oracle for this project, not a full
+  architectural simulator.
+- The pipeline files under `rtl/pipeline/` are placeholders for the next
+  phase, not a verified five-stage implementation.
 
 ## Roadmap
 
-1. Add lightweight functional coverage for opcode groups, branch direction,
-   load/store width, byte strobes, redirects, and `x0` behavior.
-2. Add more assertions for PC alignment, memory access rules, legal byte
-   enables, and no-X checks on active transactions.
-3. Build a constrained-random program generator using deterministic seeds and
-   `tools/rv32i_ref.py` expected generation.
-4. Add a commit/retire monitor so the same scoreboard concepts can survive the
-   single-cycle to pipeline transition.
-5. Implement the five-stage pipeline: IF, ID, EX, MEM, WB.
-6. Add forwarding, load-use stall handling, branch flushes, and pipeline-focused
-   directed/random regressions.
+1. Implement the five-stage pipeline: IF, ID, EX, MEM, WB.
+2. Add a commit/retire monitor so the existing generator, ISS, and scoreboard
+   carry over unchanged from the single-cycle bus view.
+3. Add forwarding, load-use stall handling, and branch flushes, with
+   pipeline-focused directed and random regressions.
+4. Open up the memory stimulus: non-zero base registers, negative offsets,
+   and (with a defined trap model) misalignment and error injection.
+5. Move toward a ready/valid memory interface and, later, caches and a small
+   SoC fabric.

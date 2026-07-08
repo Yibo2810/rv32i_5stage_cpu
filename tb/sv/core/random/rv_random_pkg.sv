@@ -70,7 +70,7 @@ package rv_random_pkg;
     function automatic int min(input int a, input int b);
         return (a < b) ? a : b;
     endfunction
-    `include "tb/sv/core/random/rv_instr.sv"
-    `include "tb/sv/core/random/rv_program.sv"
-    `include "tb/sv/core/random/rv_ref_model.sv"
+    `include "rv_instr.sv"
+    `include "rv_program.sv"
+    `include "rv_ref_model.sv"
 endpackage

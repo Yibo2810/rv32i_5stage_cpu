@@ -2,6 +2,7 @@ class rv_instr;
     rand instr_kind_e kind;
     rand logic [4:0]  rd, rs1, rs2;
     rand logic [31:0] imm32;
+    bit locked = 1'b0;
 
     constraint legal_regs_c {
         rd  inside {[0:31]};
@@ -9,17 +10,19 @@ class rv_instr;
         rs2 inside {[0:31]};
     }
 
+    constraint reserve_counter_c { rd != 5'd31; }
+
     constraint supported_kind_c {
         kind inside {
         INSTR_ADD, INSTR_SUB, INSTR_AND, INSTR_OR, INSTR_XOR, INSTR_SLL,
-        INSTR_SRL, INSTR_SRA, INSTR_SLT, INSTR_SLTU, INSTR_ADDI, INSTR_ANDI, 
-        INSTR_ORI, INSTR_XORI, INSTR_SLLI, INSTR_SRLI, INSTR_SRAI, INSTR_SLTI, 
-        INSTR_SLTIU, INSTR_LB, INSTR_LH, INSTR_LW, INSTR_LBU, INSTR_LHU, INSTR_SB, INSTR_SH, 
-        INSTR_SW, INSTR_BEQ, INSTR_BNE, INSTR_BLT, INSTR_BGE, INSTR_BLTU, INSTR_BGEU, INSTR_JAL, 
+        INSTR_SRL, INSTR_SRA, INSTR_SLT, INSTR_SLTU, INSTR_ADDI, INSTR_ANDI,
+        INSTR_ORI, INSTR_XORI, INSTR_SLLI, INSTR_SRLI, INSTR_SRAI, INSTR_SLTI,
+        INSTR_SLTIU, INSTR_LB, INSTR_LH, INSTR_LW, INSTR_LBU, INSTR_LHU, INSTR_SB, INSTR_SH,
+        INSTR_SW, INSTR_BEQ, INSTR_BNE, INSTR_BLT, INSTR_BGE, INSTR_BLTU, INSTR_BGEU, INSTR_JAL,
         INSTR_JALR, INSTR_LUI, INSTR_AUIPC};
     }
     constraint mem_safe_c {
-        (kind inside {INSTR_LB, INSTR_LH, INSTR_LW, INSTR_LBU, INSTR_LHU, INSTR_SB, INSTR_SH, 
+        (kind inside {INSTR_LB, INSTR_LH, INSTR_LW, INSTR_LBU, INSTR_LHU, INSTR_SB, INSTR_SH,
         INSTR_SW}) -> {
             rs1 == 5'd0;
             imm32 inside {[0:508]};
@@ -28,11 +31,10 @@ class rv_instr;
         (kind inside {INSTR_LH, INSTR_LHU, INSTR_SH}) -> imm32[0] == 1'b0;
         (kind inside {INSTR_LW, INSTR_SW}) -> imm32[1:0] == 2'b00;
     }
-    
+
     constraint kind_dist_c{
-        kind dist { [INSTR_ADD:INSTR_SLTU] :/ 20, [INSTR_ADDI:INSTR_SLTIU] :/ 20, [INSTR_LB:INSTR_LHU] :/ 10, 
-                    [INSTR_SB:INSTR_SW] :/ 10, [INSTR_BEQ:INSTR_BGEU] :/ 10, [INSTR_JAL:INSTR_JALR] :/ 10,
-                    [INSTR_LUI:INSTR_AUIPC] :/ 10};
+        kind dist { [INSTR_ADD:INSTR_SLTU] :/ 20, [INSTR_ADDI:INSTR_SLTIU] :/ 20, [INSTR_LB:INSTR_LHU] :/ 10,
+                    [INSTR_SB:INSTR_SW] :/ 10, [INSTR_LUI:INSTR_AUIPC] :/ 10};
     }
 
     function automatic logic [31:0] encode();

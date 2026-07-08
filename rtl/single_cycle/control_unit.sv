@@ -59,6 +59,8 @@ module control_unit(
         jump_and_link = 1'b0;
         alu_src_a_sel = ALU_A_RS1;
         pc_target_sel = PC_TARGET_PC_IMM;
+        sys_ecall    = 1'b0;
+        sys_ebreak   = 1'b0;
 
         case (opcode)
             OPCODE_R_TYPE : begin

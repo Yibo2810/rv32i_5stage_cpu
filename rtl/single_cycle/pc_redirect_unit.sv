@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
+
 import single_pkg::*;
+
 module pc_redirect_unit(
     input  logic [31:0] pc_current,
     input  logic [31:0] imm,

@@ -7,6 +7,8 @@ sim/build/
 sim/*.vcd
 sim/*.fst
 sim/*.log
+urg.log
+
 
 # Generated program files
 programs/hex/*.bin
@@ -24,3 +26,8 @@ ucli.key
 *.swp
 Thumbs.db
 Desktop.ini
+/cm.log
+vdCovLog
+.fsm.sch.verilog.xml
+novas.conf
+novas.rc

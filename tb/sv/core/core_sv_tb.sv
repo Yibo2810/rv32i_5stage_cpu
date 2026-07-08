@@ -15,7 +15,7 @@ module core_sv_tb;
     int unsigned total_static = 0;
     int          single_seed;
     int seed_offset = 0;
-    
+
     bit single_seed_mode = 1'b0;
     localparam int VACUOUS_K = 12;
     localparam int unsigned RUN_BUDGET = 2000;
@@ -73,6 +73,8 @@ module core_sv_tb;
         p.load_imem(u_memory.imem);
         prog_bytes = p.instrs.size() * 4;
 
+        u_coverage.set_program_bytes(prog_bytes);
+
         ref_model = new();
         ref_model.run_iss(u_memory.imem, p.instrs.size(), RUN_BUDGET);
 
@@ -111,7 +113,10 @@ module core_sv_tb;
         $display("========================================");
         $display("SUMMARY: %0d passed, %0d failed | total_txns=%0d, total_retired=%0d",
                  pass_cnt, fail_cnt, total_txns, total_retired);
+        $display("ASSERTION FAILURES: %0d", u_assertions.fail_count);
         $display("========================================");
+        if (u_assertions.fail_count != 0)
+            $fatal(1, "CORE ASSERTIONS FAILED: %0d", u_assertions.fail_count);
         if (fail_cnt != 0)
             $fatal(1, "RANDOM REGRESSION FAILED: %0d/%0d", fail_cnt, pass_cnt + fail_cnt);
         if (ref_model.retired >= RUN_BUDGET) begin
@@ -159,6 +164,8 @@ module core_sv_tb;
     core_monitor u_monitor(
         .mem(mem_if)
     );
+
+    rv_coverage u_coverage(mem_if.monitor);
 
     core_scoreboard u_scoreboard();
 

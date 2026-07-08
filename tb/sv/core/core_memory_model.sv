@@ -25,10 +25,6 @@ module core_memory_model(
     task automatic init_mem();
         foreach (imem[i]) imem[i] = 32'h00000013;
     endtask
-
-    task automatic load_hex(input string path);
-        $readmemh(path, imem);
-    endtask
     
     assign mem.imem_rdata = imem[mem.imem_addr[9:2]];
     assign mem.dmem_rdata = mem.dmem_read ? dmem[mem.dmem_addr[9:2]] : 32'b0;

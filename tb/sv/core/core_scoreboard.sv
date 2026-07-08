@@ -113,7 +113,7 @@ module core_scoreboard;
             end
         end
         if (errors != 0) begin
-            $display(1, "REGFILE FAIL: %s errors=%0d", test_name, errors);
+            $display("REGFILE FAIL: %s errors=%0d", test_name, errors);
             return 1'b0;
         end
         $display("REGFILE PASS: %s (x1..x31 match)", test_name);
