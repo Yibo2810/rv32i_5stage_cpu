@@ -1,10 +1,13 @@
 `timescale 1ns/1ps
 
-import pipeline_pkg::*;
-
-module if_stage(
+module if_stage
+import pipeline_pkg::*;(
   input logic clk,
   input logic rst,
+  input logic pc_stall,
+  input logic [31:0] redirect_pc,
+  input logic ex_redirect_taken,
+  input logic [31:0] ex_redirect_pc,
 
   input logic [31:0] imem_rdata,
   output logic [31:0] imem_addr,
@@ -16,7 +19,7 @@ module if_stage(
   logic [31:0] pc_plus_4;
 
   assign pc_plus_4 = pc_current + 32'd4;
-  assign pc_next   = pc_stall ? pc_current : redirect_valid ? redirect_pc : pc_plus_4;
+  assign pc_next   = pc_stall ? pc_current : ex_redirect_taken ? ex_redirect_pc : pc_plus_4;
   assign imem_addr = pc_current;
 
   pc u_pc (

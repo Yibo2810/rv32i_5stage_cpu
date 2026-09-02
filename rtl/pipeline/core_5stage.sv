@@ -1,9 +1,9 @@
 `timescale 1ns/1ps
+`default_nettype none
 
+module core_5stage 
 import single_pkg::*;
-import pipeline_pkg::*;
-
-module core_5stage (
+import pipeline_pkg::*;(
   input  logic        clk,
   input  logic        rst,
   input  logic [31:0] imem_rdata,
@@ -28,6 +28,26 @@ module core_5stage (
   exmem_t exmem_q, exmem_d;
   memwb_t memwb_q, memwb_d;
 
+  logic ex_redirect_taken;
+  logic [31:0] ex_redirect_pc;
+  logic [4:0] id_rs1_addr;
+  logic [4:0] id_rs2_addr;
+  logic [31:0] exmem_fwd_data;
+  logic [31:0] memwb_fwd_data;
+  logic id_uses_rs1, id_uses_rs2;
+  logic pc_stall, ifid_flush, ifid_en, idex_flush;
+  fwd_sel_e fwd_a_sel, fwd_b_sel;
+
+  assign memwb_fwd_data = wb_rd_data;
+
+  always_comb begin
+    case (exmem_q.ctrl_m.wb_sel)
+      WB_ALU: exmem_fwd_data = exmem_q.alu_result;
+      WB_PC4: exmem_fwd_data = exmem_q.pc_plus_4;
+      default: exmem_fwd_data = 32'b0;
+    endcase
+  end
+
   pipeline_regs u_pipeline_regs (
     .clk     (clk),
     .rst     (rst),
@@ -38,7 +58,10 @@ module core_5stage (
     .ifid_q  (ifid_q),
     .idex_q  (idex_q),
     .exmem_q (exmem_q),
-    .memwb_q (memwb_q)
+    .memwb_q (memwb_q),
+    .ifid_en (ifid_en),
+    .ifid_flush (ifid_flush),
+    .idex_flush (idex_flush)
   );
 
   if_stage u_if_stage(
@@ -46,7 +69,10 @@ module core_5stage (
     .rst(rst),
     .imem_rdata(imem_rdata),
     .imem_addr(imem_addr),
-    .ifid_d(ifid_d)
+    .ifid_d(ifid_d),
+    .pc_stall(pc_stall),
+    .ex_redirect_taken(ex_redirect_taken),
+    .ex_redirect_pc(ex_redirect_pc)
   );
 
   id_stage u_id_stage (
@@ -56,17 +82,22 @@ module core_5stage (
     .wb_w_en(wb_w_en),
     .wb_rd_addr(wb_rd_addr),
     .wb_rd_data(wb_rd_data),
-    .idex_d(idex_d)
+    .idex_d(idex_d),
+    .id_rs1_addr(id_rs1_addr),
+    .id_rs2_addr(id_rs2_addr),
+    .id_uses_rs1(id_uses_rs1),
+    .id_uses_rs2(id_uses_rs2)
   );
-
-  logic ex_redirect_taken;
-  logic [31:0] ex_redirect_pc;
 
   ex_stage u_ex_stage (
     .idex_q(idex_q),
     .exmem_d(exmem_d),
     .ex_redirect_taken(ex_redirect_taken),
-    .ex_redirect_pc(ex_redirect_pc)
+    .ex_redirect_pc(ex_redirect_pc),
+    .fwd_a_sel(fwd_a_sel),
+    .fwd_b_sel(fwd_b_sel),
+    .exmem_fwd_data(exmem_fwd_data),
+    .memwb_fwd_data(memwb_fwd_data)
   );
 
   mem_stage u_mem_stage (
@@ -87,5 +118,35 @@ module core_5stage (
     .wb_rd_data(wb_rd_data),
     .sys_ecall(sys_ecall),
     .sys_ebreak(sys_ebreak)
+  );
+
+  hazard_unit u_hazard_unit (
+    .ifid_valid(ifid_q.valid),
+    .id_rs1_addr(id_rs1_addr),
+    .id_rs2_addr(id_rs2_addr),
+    .id_uses_rs1(id_uses_rs1),
+    .id_uses_rs2(id_uses_rs2),
+    .idex_valid(idex_q.valid),
+    .idex_mem_read(idex_q.ctrl.mem_read),
+    .idex_reg_write(idex_q.ctrl.reg_write),
+    .idex_rd_addr(idex_q.rd_addr),
+    .ex_redirect_taken(ex_redirect_taken),
+    .pc_stall(pc_stall),
+    .ifid_flush(ifid_flush),
+    .ifid_en(ifid_en),
+    .idex_flush(idex_flush)
+  );
+
+  forwarding_unit u_fwd (
+    .idex_valid(idex_q.valid),
+    .idex_rs1_addr(idex_q.rs1_addr),
+    .idex_rs2_addr(idex_q.rs2_addr),
+    .exmem_reg_write(exmem_q.ctrl_m.reg_write),
+    .exmem_reg_read(exmem_q.ctrl_m.mem_read),
+    .exmem_rd_addr(exmem_q.rd_addr),
+    .memwb_reg_write(memwb_q.ctrl_wb),
+    .memwb_rd_addr(memwb_q.rd_addr),
+    .fwd_a_sel(fwd_a_sel),
+    .fwd_b_sel(fwd_b_sel)
   );
 endmodule

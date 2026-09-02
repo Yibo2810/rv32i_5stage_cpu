@@ -1,9 +1,8 @@
 `timescale 1ns/1ps
 
+module mem_stage 
 import single_pkg::*;
-import pipeline_pkg::*;
-
-module mem_stage(
+import pipeline_pkg::*;(
   input exmem_t      exmem_q,
   input logic [31:0] dmem_rdata,
 
@@ -47,7 +46,7 @@ module mem_stage(
       memwb_d.pc_plus_4   = exmem_q.pc_plus_4;
       memwb_d.rd_addr    = exmem_q.rd_addr;
 
-      memwb_d.ctrl_wb.reg_write     = exmem_q.ctrl_m.reg_write && !exmem_q.ctrl_m.illegal_instr && !mem_fault;
+      memwb_d.ctrl_wb.reg_write     = exmem_q.ctrl_m.reg_write && !mem_fault;
       memwb_d.ctrl_wb.wb_sel        = exmem_q.ctrl_m.wb_sel;
       memwb_d.ctrl_wb.illegal_instr = exmem_q.ctrl_m.illegal_instr;
       memwb_d.ctrl_wb.mem_fault     = mem_fault;

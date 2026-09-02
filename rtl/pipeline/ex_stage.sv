@@ -1,10 +1,15 @@
 `timescale 1ns/1ps
 
+module ex_stage
 import single_pkg::*;
-import pipeline_pkg::*;
-
-module ex_stage(
+import pipeline_pkg::*;(
   input  idex_t       idex_q,
+
+  input  logic [31:0] exmem_fwd_data,
+  input  logic [31:0] memwb_fwd_data,
+  input  fwd_sel_e  fwd_a_sel,
+  input  fwd_sel_e  fwd_b_sel,
+
   output exmem_t      exmem_d,
   output logic        ex_redirect_taken,
   output logic [31:0] ex_redirect_pc
@@ -19,11 +24,24 @@ module ex_stage(
   logic        alu_zero;
 
   logic        branch_taken;
-  logic [31:0] ex_pc_next;
   logic        ex_side_effect_ok;
+  logic [31:0] ex_pc_next;
 
-  assign ex_rs1_fwd = idex_q.rs1_data;
-  assign ex_rs2_fwd = idex_q.rs2_data;
+  always_comb begin
+    case (fwd_a_sel)
+      FWD_EXMEM: ex_rs1_fwd = exmem_fwd_data;
+      FWD_MEMWB: ex_rs1_fwd = memwb_fwd_data;
+      default:   ex_rs1_fwd = idex_q.rs1_data;
+    endcase
+  end
+
+  always_comb begin
+    case (fwd_b_sel)
+      FWD_EXMEM: ex_rs2_fwd = exmem_fwd_data;
+      FWD_MEMWB: ex_rs2_fwd = memwb_fwd_data;
+      default:   ex_rs2_fwd = idex_q.rs2_data;
+    endcase
+  end
 
   always_comb begin
     case (idex_q.ctrl.alu_src_a_sel)
@@ -38,7 +56,8 @@ module ex_stage(
   assign branch_taken = idex_q.ctrl.branch && (alu_zero == idex_q.ctrl.branch_on_zero);
   assign ex_side_effect_ok = idex_q.valid && !idex_q.ctrl.illegal_instr;
   assign ex_redirect_taken = ex_side_effect_ok && (branch_taken || idex_q.ctrl.jump_and_link);
-  assign ex_redirect_pc = ex_pc_next;
+  assign ex_redirect_pc = (idex_q.ctrl.pc_target_sel == PC_TARGET_ALU) ? {alu_result[31:1], 1'b0} : (idex_q.pc + idex_q.imm);
+  assign ex_pc_next = ex_redirect_taken ? ex_redirect_pc : idex_q.pc_plus_4;
 
   always_comb begin
     exmem_d = '0;
@@ -51,7 +70,7 @@ module ex_stage(
       exmem_d.instr = idex_q.instr;
 
       exmem_d.alu_result = alu_result;
-      exmem_d.store_data = ex_rs2_fwd;
+      exmem_d.store_data = ex_rs2_fwd;  //not alu_src_b
       exmem_d.rd_addr = idex_q.rd_addr;
 
       exmem_d.ctrl_m.mem_read = idex_q.ctrl.mem_read;
@@ -73,17 +92,5 @@ module ex_stage(
     .result(alu_result),
     .alu_ctrl(idex_q.ctrl.alu_ctrl)
   );
-
-  pc_redirect_unit u_pc_redirect_unit (
-    .alu_result(alu_result),
-    .pc_current(idex_q.pc),
-    .pc_plus_4(idex_q.pc_plus_4),
-    .imm(idex_q.imm),
-    .pc_target_sel(idex_q.ctrl.pc_target_sel),
-    .pc_next(ex_pc_next),
-    .branch_taken(branch_taken),
-    .jump_and_link(idex_q.ctrl.jump_and_link),
-    .side_effect_ok(ex_side_effect_ok)
-   );
 endmodule
 

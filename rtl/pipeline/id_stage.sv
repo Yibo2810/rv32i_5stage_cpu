@@ -1,15 +1,19 @@
 `timescale 1ns/1ps
 
+module id_stage
 import pipeline_pkg::*;
-import single_pkg::*;
-
-module id_stage(
+import single_pkg::*;(
   input logic clk,
   input logic rst,
 
   input logic        wb_w_en,
   input logic [4:0]  wb_rd_addr,
   input logic [31:0] wb_rd_data,
+
+  output logic [4:0] id_rs1_addr,
+  output logic [4:0] id_rs2_addr,
+  output logic       id_uses_rs1,
+  output logic       id_uses_rs2,
 
   input ifid_t   ifid_q,
   output idex_t  idex_d
@@ -28,6 +32,9 @@ module id_stage(
   logic [31:0] imm;
   imm_sel_e    imm_sel;
   idex_ctrl_t  ctrl;
+  logic       raw_reg_write;
+  logic       ctrl_uses_rs1;
+  logic       ctrl_uses_rs2;
 
   assign instr    = ifid_q.instr;
   assign rs1_addr = instr[19:15];
@@ -36,6 +43,12 @@ module id_stage(
   // ID bypass
   assign id_rs1_data = (wb_w_en && wb_rd_addr != 5'd0 && wb_rd_addr == rs1_addr) ? wb_rd_data : rf_rs1_data;
   assign id_rs2_data = (wb_w_en && wb_rd_addr != 5'd0 && wb_rd_addr == rs2_addr) ? wb_rd_data : rf_rs2_data;
+  assign ctrl.reg_write = raw_reg_write && (rd_addr != 5'd0) && !ctrl.illegal_instr;
+  //ctrl
+  assign id_rs1_addr = rs1_addr;
+  assign id_rs2_addr = rs2_addr;
+  assign id_uses_rs1 = ctrl_uses_rs1;
+  assign id_uses_rs2 = ctrl_uses_rs2;
 
   always_comb begin
     idex_d = '0;
@@ -61,7 +74,7 @@ module id_stage(
     .instr          (instr),
     .mem_write      (ctrl.mem_write),
     .mem_read       (ctrl.mem_read),
-    .reg_write      (ctrl.reg_write),
+    .reg_write      (raw_reg_write),
     .alu_sel_b      (ctrl.alu_sel_b),
     .wb_sel         (ctrl.wb_sel),
     .branch         (ctrl.branch),
@@ -75,7 +88,9 @@ module id_stage(
     .alu_src_a_sel  (ctrl.alu_src_a_sel),
     .pc_target_sel  (ctrl.pc_target_sel),
     .sys_ecall      (ctrl.sys_ecall),
-    .sys_ebreak     (ctrl.sys_ebreak)
+    .sys_ebreak     (ctrl.sys_ebreak),
+    .ctrl_uses_rs1  (ctrl_uses_rs1),
+    .ctrl_uses_rs2  (ctrl_uses_rs2)
   );
 
   imm_gen u_imm_gen (

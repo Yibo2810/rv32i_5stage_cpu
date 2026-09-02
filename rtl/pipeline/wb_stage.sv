@@ -1,9 +1,8 @@
 `timescale 1ns/1ps
 
+module wb_stage 
 import single_pkg::*;
-import pipeline_pkg::*;
-
-module wb_stage(
+import pipeline_pkg::*;(
   input memwb_t memwb_q,
 
   output logic       wb_w_en,

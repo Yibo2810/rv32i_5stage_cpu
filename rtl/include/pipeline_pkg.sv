@@ -88,4 +88,10 @@ package pipeline_pkg;
         logic [4:0]  rd_addr;
         memwb_ctrl_t ctrl_wb;
     } memwb_t;
+
+  typedef enum logic [1:0] { 
+    FWD_NONE = 2'b00,
+    FWD_EXMEM = 2'b01,
+    FWD_MEMWB = 2'b10
+   } fwd_sel_e;
 endpackage
