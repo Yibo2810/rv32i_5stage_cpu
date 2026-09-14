@@ -1,8 +1,7 @@
 `timescale 1ns/1ps
 
-import single_pkg::*;
-
-module control_unit(
+module control_unit
+import single_pkg::*; (
     input  logic [31:0]   instr,
     output logic          mem_write,
     output logic          mem_read,
@@ -12,15 +11,18 @@ module control_unit(
     output logic          branch,
     output alu_ctrl_e     alu_ctrl,
     output imm_sel_e      imm_sel,
-    output logic          illegal_instr,
     output logic          branch_on_zero,
     output mem_size_e     mem_size,
     output logic          load_unsigned,
     output logic          jump_and_link,
     output alu_src_a_sel_e alu_src_a_sel,
     output pc_target_sel_e pc_target_sel,
+    output logic          illegal_instr,
     output logic          sys_ecall,
-    output logic          sys_ebreak
+    output logic          sys_ebreak,
+    output logic          ctrl_uses_rs1,
+    output logic          ctrl_uses_rs2,
+    output exception_t    decode_exc
 );
     typedef enum logic [1:0] {
         ALU_OP_ADD    = 2'b00,
@@ -36,9 +38,11 @@ module control_unit(
     logic       illegal_main;
     logic       illegal_alu;
 
-    logic [4:0] rs1_field = instr[19:15]; //ecall and ebreak use rs1=0
-    logic [4:0] rd_field  = instr[11:7];
-
+    logic [4:0] rs1_field; //ecall and ebreak use rs1=0
+    logic [4:0] rd_field;
+    
+    assign rs1_field = instr[19:15];
+    assign rd_field  = instr[11:7];
     assign opcode = instr[6:0];
     assign funct7 = instr[31:25];
     assign funct3 = instr[14:12];
@@ -61,6 +65,8 @@ module control_unit(
         pc_target_sel = PC_TARGET_PC_IMM;
         sys_ecall    = 1'b0;
         sys_ebreak   = 1'b0;
+        ctrl_uses_rs1 = 1'b0;
+        ctrl_uses_rs2 = 1'b0;
 
         case (opcode)
             OPCODE_R_TYPE : begin
@@ -68,6 +74,8 @@ module control_unit(
                 imm_sel   = IMM_NONE;
                 wb_sel    = WB_ALU;
                 alu_op    = ALU_OP_RTYPE;
+                ctrl_uses_rs1 = 1'b1;
+                ctrl_uses_rs2 = 1'b1;
             end
 
             OPCODE_I_TYPE : begin
@@ -76,6 +84,7 @@ module control_unit(
                 imm_sel   = IMM_I;
                 wb_sel    = WB_ALU;
                 alu_op    = ALU_OP_ITYPE;
+                ctrl_uses_rs1 = 1'b1;
             end
 
             OPCODE_BRANCH : begin
@@ -85,6 +94,8 @@ module control_unit(
                 wb_sel  = WB_ALU;
                 alu_src_a_sel = ALU_A_RS1;
                 pc_target_sel = PC_TARGET_PC_IMM;
+                ctrl_uses_rs1 = 1'b1;
+                ctrl_uses_rs2 = 1'b1;
             end
 
             OPCODE_LOAD : begin
@@ -94,6 +105,7 @@ module control_unit(
                 wb_sel    = WB_MEM;
                 imm_sel   = IMM_I;
                 alu_op    = ALU_OP_ADD;
+                ctrl_uses_rs1 = 1'b1;
                 case (funct3)
                     FUNCT3_LB : begin mem_size = MEM_BYTE; load_unsigned = 1'b0; end
                     FUNCT3_LH : begin mem_size = MEM_HALF; load_unsigned = 1'b0; end
@@ -110,6 +122,8 @@ module control_unit(
                 wb_sel    = WB_MEM;
                 imm_sel   = IMM_S;
                 alu_op    = ALU_OP_ADD;
+                ctrl_uses_rs1 = 1'b1;
+                ctrl_uses_rs2 = 1'b1;
                 case (funct3)
                     FUNCT3_SB: mem_size = MEM_BYTE;
                     FUNCT3_SH: mem_size = MEM_HALF;
@@ -120,6 +134,7 @@ module control_unit(
 
             OPCODE_JAL : begin
                 reg_write = 1'b1;
+                alu_sel_b = 1'b1;
                 imm_sel   = IMM_J;
                 wb_sel    = WB_PC4;
                 alu_op    = ALU_OP_ADD;
@@ -137,6 +152,7 @@ module control_unit(
                 jump_and_link = 1'b1;
                 pc_target_sel = PC_TARGET_ALU;
                 alu_src_a_sel = ALU_A_RS1;
+                ctrl_uses_rs1 = 1'b1;
                 if(funct3 != FUNCT3_JALR)
                     illegal_main = 1'b1;
                 else
@@ -244,5 +260,21 @@ module control_unit(
         endcase
     end
 
+    always_comb begin
+        decode_exc = '0;
+
+        if (illegal_alu || illegal_main) begin
+            decode_exc.valid = 1'b1;
+            decode_exc.cause = EXC_ILLEGAL_INSTR;
+        end else if (sys_ebreak) begin
+            decode_exc.valid = 1'b1;
+            decode_exc.cause = EXC_BREAKPOINT;
+        end else if (sys_ecall) begin
+            decode_exc.valid = 1'b1;
+            decode_exc.cause = EXC_ECALL_MMODE;
+
+        end
+    end
+    
     assign illegal_instr = illegal_alu | illegal_main;
 endmodule

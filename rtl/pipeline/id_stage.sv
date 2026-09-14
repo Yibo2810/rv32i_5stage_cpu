@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+`default_nettype none
 
 module id_stage
 import pipeline_pkg::*;
@@ -31,8 +32,10 @@ import single_pkg::*;(
 
   logic [31:0] imm;
   imm_sel_e    imm_sel;
+  idex_ctrl_t  ctrl_final;
   idex_ctrl_t  ctrl;
-  logic       raw_reg_write;
+  exception_t decode_exc;
+  
   logic       ctrl_uses_rs1;
   logic       ctrl_uses_rs2;
 
@@ -43,7 +46,10 @@ import single_pkg::*;(
   // ID bypass
   assign id_rs1_data = (wb_w_en && wb_rd_addr != 5'd0 && wb_rd_addr == rs1_addr) ? wb_rd_data : rf_rs1_data;
   assign id_rs2_data = (wb_w_en && wb_rd_addr != 5'd0 && wb_rd_addr == rs2_addr) ? wb_rd_data : rf_rs2_data;
-  assign ctrl.reg_write = raw_reg_write && (rd_addr != 5'd0) && !ctrl.illegal_instr;
+  always_comb begin
+    ctrl_final = ctrl;
+    ctrl_final.reg_write = ctrl.reg_write && (rd_addr != 5'd0) && !decode_exc.valid; //some synthesis tools don't support drive multiple drivers to a packed struct...
+  end
   //ctrl
   assign id_rs1_addr = rs1_addr;
   assign id_rs2_addr = rs2_addr;
@@ -56,6 +62,7 @@ import single_pkg::*;(
     if (ifid_q.valid) begin
       idex_d.valid     = 1'b1;
       idex_d.pc        = ifid_q.pc;
+      idex_d.ctrl      = ctrl_final;
       idex_d.pc_plus_4 = ifid_q.pc_plus_4;
       idex_d.instr     = ifid_q.instr;
 
@@ -65,8 +72,7 @@ import single_pkg::*;(
       idex_d.rs2_addr = rs2_addr;
       idex_d.rd_addr  = rd_addr;
       idex_d.imm      = imm;
-
-      idex_d.ctrl     = ctrl;
+      idex_d.exc      = decode_exc;
     end
   end
 
@@ -74,23 +80,21 @@ import single_pkg::*;(
     .instr          (instr),
     .mem_write      (ctrl.mem_write),
     .mem_read       (ctrl.mem_read),
-    .reg_write      (raw_reg_write),
+    .reg_write      (ctrl.reg_write),
     .alu_sel_b      (ctrl.alu_sel_b),
     .wb_sel         (ctrl.wb_sel),
     .branch         (ctrl.branch),
     .alu_ctrl       (ctrl.alu_ctrl),
     .imm_sel        (imm_sel),
-    .illegal_instr  (ctrl.illegal_instr),
     .branch_on_zero (ctrl.branch_on_zero),
     .mem_size       (ctrl.mem_size),
     .load_unsigned  (ctrl.load_unsigned),
     .jump_and_link  (ctrl.jump_and_link),
     .alu_src_a_sel  (ctrl.alu_src_a_sel),
     .pc_target_sel  (ctrl.pc_target_sel),
-    .sys_ecall      (ctrl.sys_ecall),
-    .sys_ebreak     (ctrl.sys_ebreak),
     .ctrl_uses_rs1  (ctrl_uses_rs1),
-    .ctrl_uses_rs2  (ctrl_uses_rs2)
+    .ctrl_uses_rs2  (ctrl_uses_rs2),
+    .decode_exc     (decode_exc)
   );
 
   imm_gen u_imm_gen (
@@ -111,4 +115,4 @@ import single_pkg::*;(
     .rs2_data  (rf_rs2_data)
   );
 endmodule
-
+`default_nettype wire

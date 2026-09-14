@@ -17,15 +17,12 @@ package pipeline_pkg;
         logic          branch;
         alu_ctrl_e     alu_ctrl;
         //imm_sel_e      imm_sel;  only used to imm_gen, there is no need to transform to the next stage.
-        logic          illegal_instr;
         logic          branch_on_zero;
         mem_size_e     mem_size;
         logic          load_unsigned;
         logic          jump_and_link;
         alu_src_a_sel_e alu_src_a_sel;
         pc_target_sel_e pc_target_sel;
-        logic          sys_ecall;
-        logic          sys_ebreak;
     } idex_ctrl_t;
     
     typedef struct packed {
@@ -42,6 +39,7 @@ package pipeline_pkg;
         logic [31:0] imm;
 
         idex_ctrl_t  ctrl;
+        exception_t exc;
     } idex_t;
     
     typedef struct packed {
@@ -51,9 +49,6 @@ package pipeline_pkg;
         logic        load_unsigned;
         logic        reg_write;
         wb_sel_e     wb_sel;
-        logic        illegal_instr;
-        logic        sys_ecall;
-        logic        sys_ebreak;
     } exmem_ctrl_t;
 
   typedef struct packed {
@@ -66,15 +61,12 @@ package pipeline_pkg;
         logic [31:0] pc_plus_4;
         logic [4:0]  rd_addr;
         exmem_ctrl_t ctrl_m;
+        exception_t exc;
     } exmem_t;
 
   typedef struct packed {
         logic        reg_write;
         wb_sel_e     wb_sel;
-        logic        illegal_instr;
-        logic        mem_fault;
-        logic        sys_ecall;
-        logic        sys_ebreak;
     } memwb_ctrl_t;
 
   typedef struct packed {
@@ -87,6 +79,7 @@ package pipeline_pkg;
         logic [31:0] pc_plus_4;
         logic [4:0]  rd_addr;
         memwb_ctrl_t ctrl_wb;
+        exception_t exc;
     } memwb_t;
 
   typedef enum logic [1:0] { 

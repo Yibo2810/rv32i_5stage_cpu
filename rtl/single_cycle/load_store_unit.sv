@@ -52,7 +52,7 @@ module load_store_unit(
                 mem_wdata = 32'bx;
                 mem_wstrb = 4'b0000;
                 load_data = 32'bx;
-                misaligned = 1'bx;
+                misaligned = 1'b0;
             end
         endcase
     end

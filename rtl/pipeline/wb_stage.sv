@@ -1,25 +1,32 @@
 `timescale 1ns/1ps
+`default_nettype none
 
 module wb_stage 
 import single_pkg::*;
 import pipeline_pkg::*;(
   input memwb_t memwb_q,
+  input logic  mem_stall,
 
   output logic       wb_w_en,
   output logic [4:0] wb_rd_addr,
   output logic [31:0] wb_rd_data,
 
-  output logic       sys_ecall,
-  output logic       sys_ebreak
+  output logic        trap_valid,
+  output exc_cause_e  trap_cause,
+  output logic [31:0] trap_pc,
+  output logic        wb_trap
 );
-  logic wb_side_effect_ok;
+  logic wb_retire;
 
-  assign wb_side_effect_ok = memwb_q.valid && !memwb_q.ctrl_wb.illegal_instr && !memwb_q.ctrl_wb.mem_fault;
+  assign wb_retire = memwb_q.valid && !mem_stall;
+  assign wb_trap = wb_retire && memwb_q.exc.valid;
 
-  assign wb_w_en    = wb_side_effect_ok && memwb_q.ctrl_wb.reg_write && (memwb_q.rd_addr != 5'b0);
+  assign wb_w_en    = wb_retire && !memwb_q.exc.valid && memwb_q.ctrl_wb.reg_write && (memwb_q.rd_addr != 5'b0);
   assign wb_rd_addr = memwb_q.rd_addr;
-  assign sys_ecall  = wb_side_effect_ok && memwb_q.ctrl_wb.sys_ecall;
-  assign sys_ebreak = wb_side_effect_ok && memwb_q.ctrl_wb.sys_ebreak;
+
+  assign trap_valid = wb_trap;
+  assign trap_pc = memwb_q.pc;
+  assign trap_cause = memwb_q.exc.cause;
 
   always_comb begin
     case (memwb_q.ctrl_wb.wb_sel)
@@ -30,4 +37,4 @@ import pipeline_pkg::*;(
     endcase
   end
 endmodule
-
+`default_nettype wire

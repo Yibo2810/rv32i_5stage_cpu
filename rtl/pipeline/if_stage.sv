@@ -1,11 +1,11 @@
 `timescale 1ns/1ps
+`default_nettype none
 
 module if_stage
 import pipeline_pkg::*;(
   input logic clk,
   input logic rst,
   input logic pc_stall,
-  input logic [31:0] redirect_pc,
   input logic ex_redirect_taken,
   input logic [31:0] ex_redirect_pc,
 
@@ -38,4 +38,4 @@ import pipeline_pkg::*;(
     ifid_d.instr     = imem_rdata;
   end
 endmodule
-
+`default_nettype wire

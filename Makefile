@@ -6,6 +6,9 @@ FILELIST  := tb/filelists/core_sv.f
 CM_FLAGS  := -cm line+cond+tgl+branch+fsm+assert
 COV_DIR   := $(BUILD_DIR)/simv.vdb
 COV_RPT   := $(BUILD_DIR)/urg_report
+PL_BUILD_DIR := sim/build/pipeline_vcs
+PL_SIMV      := $(PL_BUILD_DIR)/simv
+PL_FILELIST  := tb/filelists/pipeline.f
 TOP_ARTIFACTS := \
 	ucli.key \
 	cm.log \
@@ -70,3 +73,14 @@ clean: clean-artifacts
 
 distclean: clean-artifacts
 	rm -rf sim/build
+
+pl-lint:
+	verilator --lint-only -Wall -Wno-fatal -sv -f tb/filelists/pipeline_rtl.f --top-module core_5stage
+
+pl-build:
+	@mkdir -p $(PL_BUILD_DIR)/csrc
+	vcs -full64 -sverilog -debug_access+all -top pipeline_tb -f $(PL_FILELIST) \
+	  -Mdir=$(PL_BUILD_DIR)/csrc -o $(PL_SIMV) -l $(PL_BUILD_DIR)/compile.log
+
+pl-run: pl-build
+	./$(PL_SIMV) +SEED_OFFSET=$$(date +%s) $(ARGS) -l $(PL_BUILD_DIR)/run.log

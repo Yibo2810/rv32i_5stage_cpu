@@ -4,15 +4,27 @@ A learning-oriented RV32I CPU project implemented in Verilog and
 SystemVerilog.
 
 The project has completed its **v0.4.0 constrained-random verification
-milestone**. The single-cycle RV32I core is now verified by a seed-reproducible
+milestone**. The single-cycle RV32I core is verified by a seed-reproducible
 constrained-random regression checked against an in-testbench ISS reference
 model, guarded by concurrent assertions, and measured by a functional coverage
-model closed to 100% of its defined bins — all running under VCS. The next
-major phase is the classic five-stage pipeline.
+model closed to 100% of its defined bins — all running under VCS.
+
+The current work is **v0.5.0: the classic five-stage pipeline**. The pipeline
+RTL (IF/ID/EX/MEM/WB, forwarding, load-use stalls, redirect flushes, a global
+freeze on memory stalls, a WB-committed exception token, and a request/response
+data-memory interface with a BRAM adapter) is complete and running six directed
+bring-up programs. It is **not verified yet**: the testbench has no built-in
+oracle, and the constrained-random flow has not been ported to it. See
+[docs/03_pipeline_design.md](docs/03_pipeline_design.md),
+[docs/04_hazard_forwarding.md](docs/04_hazard_forwarding.md) and
+[docs/11_v0_5_0_pipeline_bringup.md](docs/11_v0_5_0_pipeline_bringup.md).
 
 ## Current Milestone
 
-**v0.4.0: constrained-random verification freeze**
+**v0.5.0 (in progress): five-stage pipeline bring-up** — directed bring-up
+only (see [docs/11_v0_5_0_pipeline_bringup.md](docs/11_v0_5_0_pipeline_bringup.md))
+
+**v0.4.0 (frozen): constrained-random verification of the single-cycle core**
 (see [docs/09_v0_4_0_milestone.md](docs/09_v0_4_0_milestone.md))
 
 Each random seed builds a structured program (straight-line code, bounded
@@ -61,9 +73,16 @@ fully green regressions — are documented in
 - [x] Concurrent assertion set (15 properties) with failure-count regression gating
 - [x] Functional coverage model (instruction, memory, control-flow) closed to 100% of defined bins
 - [x] Code coverage collection scoped to the core with documented exclusions
-- [ ] Commit/retire monitor for pipeline-friendly checking
-- [ ] Five-stage pipeline implementation
-- [ ] Forwarding, hazard detection, stalls, and flushes
+- [x] Commit/retire monitor for pipeline-friendly checking (`tb/sv/pipeline/pipeline_monitor.sv`)
+- [x] Five-stage pipeline RTL: IF, ID, EX, MEM, WB with per-stage enable/flush
+- [x] Forwarding (EX/MEM, MEM/WB, WB→ID bypass), load-use stall, redirect flush, global freeze on memory stall
+- [x] Unified exception token (`exception_t`) committed at WB, with sticky `halted`
+- [x] Request/response data-memory interface (single outstanding) plus a BRAM adapter
+- [ ] Pipeline oracle in the testbench (directed expected-value checks) — the bring-up dump is not yet compared inside the TB
+- [ ] Pipeline directed hazard tests (`hazard_test.S` is still a stub) and request back-pressure stimulus
+- [ ] Pipeline constrained-random regression (sources present under `tb/sv/pipeline/random/`, not yet compiled in)
+- [ ] Pipeline assertions and coverage
+- [ ] Vivado synthesis and FPGA bring-up
 
 ## Verification Summary
 
@@ -130,7 +149,7 @@ Important files:
 |---|---|
 | `rtl/include/single_pkg.sv` | Shared SystemVerilog RV32I constants and control types |
 | `rtl/single_cycle/` | Current verified single-cycle CPU RTL |
-| `rtl/pipeline/` | Placeholder area for the next five-stage pipeline phase |
+| `rtl/pipeline/` | Five-stage pipeline RTL: `{if,id,ex,mem,wb}_stage.sv`, `pipeline_regs.sv`, `hazard_unit.sv`, `forwarding_unit.sv`, `core_5stage.sv`, `memory/dmem_bram.sv` (see [docs/03_pipeline_design.md](docs/03_pipeline_design.md)) |
 | `tb/sv/core/core_sv_tb.sv` | VCS top-level SystemVerilog harness |
 | `tb/sv/core/core_verif_pkg.sv` | Shared verification structs and enums |
 | `tb/sv/core/core_test_db.sv` | Test metadata database: name, hex path, expected path, max cycles |
@@ -144,7 +163,13 @@ Important files:
 | `tb/sv/core/random/rv_program.sv` | Structured program generator: loops, branches, JALR, store→load pairs |
 | `tb/sv/core/random/rv_ref_model.sv` | ISS reference model (fatals on anything it does not implement) |
 | `tb/sv/core/random/rv_coverage.sv` | Execution-side functional coverage (instruction/memory/control-flow) |
-| `tb/filelists/core_sv.f` | VCS compile filelist |
+| `tb/filelists/core_sv.f` | VCS compile filelist (single-cycle) |
+| `tb/sv/pipeline/pipeline_tb.sv` | Pipeline bring-up testbench: load one hex, run until `halted`, dump, verdict |
+| `tb/sv/pipeline/pipeline_probe_if.sv` | Pipeline interface with `pl_core`/`bram`/`pipeline_monitor` modports |
+| `tb/sv/pipeline/pipeline_memory.sv` | Pipeline memory: imem pre-filled with `ebreak` + `dmem_bram` instance |
+| `tb/sv/pipeline/pipeline_monitor.sv` | Passive capture of commits, memory transactions, and trap events |
+| `tb/filelists/pipeline.f` | VCS compile filelist (pipeline; scoreboard/assertions/random entries commented out) |
+| `tb/filelists/pipeline_rtl.f` | Pipeline RTL compile order, shared by lint and VCS |
 | `tb/filelists/cm_hier.config` | Restricts code coverage collection to the core |
 | `scripts/parse_cov.py` | Coverage-database report: per-module metrics and zero-hit bins |
 | `programs/asm/` | Directed assembly tests |
@@ -186,6 +211,21 @@ simulation output and the coverage database under `sim/build/core_vcs/`.
 Directed assembly programs can be regenerated with `./scripts/asm_to_hex.sh`
 and their expected files with `./tools/rv32i_ref.py --all`.
 
+Run the five-stage pipeline bring-up on one directed program:
+
+```sh
+make pl-lint                                             # Verilator -Wall lint of the pipeline RTL
+make pl-build                                            # compile pipeline_tb
+make pl-run ARGS="+HEX=programs/hex/load_store_width_test.hex"
+```
+
+Output is written under `sim/build/pipeline_vcs/` (`compile.log`, `run.log`).
+Each run prints a `COMMIT`/`TXN`/`REG` dump plus a `SUMMARY` line, and reports
+`BRINGUP DONE` when there was no timeout and exactly one `EXC_BREAKPOINT` trap.
+**The pipeline testbench does not compare results against expected values yet** —
+the bring-up trace is inspected by hand. See
+[docs/11_v0_5_0_pipeline_bringup.md](docs/11_v0_5_0_pipeline_bringup.md).
+
 ## Repository Layout
 
 ```text
@@ -200,11 +240,16 @@ and their expected files with `./tools/rv32i_ref.py --all`.
 ├── rtl/
 │   ├── include/
 │   ├── pipeline/
+│   │   └── memory/
 │   └── single_cycle/
 ├── scripts/
 ├── tb/
 │   ├── filelists/
-│   └── sv/core/
+│   └── sv/
+│       ├── core/
+│       │   └── random/
+│       └── pipeline/
+│           └── random/
 ├── tools/
 └── sim/
 ```
@@ -229,17 +274,38 @@ Documented in detail in
 - The ISS in `rv_ref_model.sv` implements exactly the supported subset and
   fatals on anything else — it is an oracle for this project, not a full
   architectural simulator.
-- The pipeline files under `rtl/pipeline/` are placeholders for the next
-  phase, not a verified five-stage implementation.
+- The pipeline (`rtl/pipeline/`) is **not verified**. It is implemented and
+  bring-up tested with six directed programs; the testbench has no oracle, the
+  hazard-specific directed tests are missing (`hazard_test.S` is a stub), the
+  random flow has not been ported, and `ecall`/illegal-instruction/misaligned
+  trap paths are implemented but not exercised by any program in the repository.
+  Details: [docs/11_v0_5_0_pipeline_bringup.md](docs/11_v0_5_0_pipeline_bringup.md).
+- Trap handling in the pipeline is "flush everything younger, then halt
+  forever" (`halted`); there is no CSR, `mtvec`, `mepc`, `mcause` or `mtval`, and
+  no exception return.
+- The pipeline's memory interface is single-outstanding with a 2-cycle cost per
+  load/store against a 1-cycle BRAM; instruction fetch is still a
+  same-cycle combinational read, so on FPGA the instruction memory must be
+  LUTRAM, not BRAM.
+- The pipeline work is uncommitted on `feature/pipeline-5stage`, and the v0.4.0
+  single-cycle regression has not been re-run since the shared leaf modules
+  (`control_unit`, `load_store_unit`, `core_single_cycle`) were edited.
 
 ## Roadmap
 
-1. Implement the five-stage pipeline: IF, ID, EX, MEM, WB.
-2. Add a commit/retire monitor so the existing generator, ISS, and scoreboard
-   carry over unchanged from the single-cycle bus view.
-3. Add forwarding, load-use stall handling, and branch flushes, with
-   pipeline-focused directed and random regressions.
-4. Open up the memory stimulus: non-zero base registers, negative offsets,
-   and (with a defined trap model) misalignment and error injection.
-5. Move toward a ready/valid memory interface and, later, caches and a small
-   SoC fabric.
+1. ~~Implement the five-stage pipeline: IF, ID, EX, MEM, WB.~~ **Done in RTL**
+   (directed bring-up only).
+2. ~~Add a commit/retire monitor so the existing generator, ISS, and scoreboard
+   carry over unchanged from the single-cycle bus view.~~ **Monitor done**;
+   the scoreboard/oracle port is next.
+3. ~~Add forwarding, load-use stall handling, branch flushes, and a
+   request/response memory interface.~~ **Done in RTL**; pipeline-focused
+   directed and random regressions are the current work.
+4. Give the pipeline testbench an oracle (expected transaction stream and final
+   signatures), then add pipeline assertions, hazard-directed tests, and the
+   ported constrained-random regression.
+5. Open up the memory stimulus: non-zero base registers, negative offsets,
+   request back-pressure, and (with a defined trap model) misalignment and
+   error injection.
+6. FPGA bring-up: Vivado synthesis, BRAM/LUTRAM inference check, `halted` on an
+   LED; then caches and a small SoC fabric.
