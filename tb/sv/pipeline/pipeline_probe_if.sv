@@ -33,7 +33,7 @@ interface pipeline_probe_if import single_pkg::*;(
     logic [31:0] retire_next_pc;
 
     logic        rd_we;
-    logic [31:0] rd_addr;
+    logic [4:0]  rd_addr;
     logic [31:0] rd_data;
 
     clocking cb @(posedge clk);

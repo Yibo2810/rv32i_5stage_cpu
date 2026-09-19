@@ -79,8 +79,14 @@ pl-lint:
 
 pl-build:
 	@mkdir -p $(PL_BUILD_DIR)/csrc
-	vcs -full64 -sverilog -debug_access+all -top pipeline_tb -f $(PL_FILELIST) \
-	  -Mdir=$(PL_BUILD_DIR)/csrc -o $(PL_SIMV) -l $(PL_BUILD_DIR)/compile.log
+	vcs -full64 \
+	-sverilog \
+	-debug_access+all \
+	-top pipeline_tb \
+	-f $(PL_FILELIST) \
+	-Mdir=$(PL_BUILD_DIR)/csrc \
+	-o $(PL_SIMV) \
+	-l $(PL_BUILD_DIR)/compile.log
 
 pl-run: pl-build
 	./$(PL_SIMV) +SEED_OFFSET=$$(date +%s) $(ARGS) -l $(PL_BUILD_DIR)/run.log
