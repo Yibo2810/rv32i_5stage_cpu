@@ -78,7 +78,7 @@ module pipeline_tb;
         else begin
             fail_cnt++;
             $display("  -> FAIL: %s", name);
-            $display("  reproduce: make run ARGS=\"+SINGLE_SEED=%0d\"", seed);
+            $display("  reproduce: make pl-run ARGS=\"+SINGLE_SEED=%0d\"", seed);
         end
     endtask
 
@@ -110,16 +110,11 @@ module pipeline_tb;
         pl_program p = new();
         string nm = $sformatf("random_seed_%0d", seed);
         bit ok = 1'b1;
-        int unsigned prog_bytes;
-        int unsigned dut_n;
-        logic [31:0] dut_pc;
 
         p.build(seed);
+        u_memory.clear_dmem();
         u_memory.init_mem();
         p.load_imem(u_memory.imem);
-        prog_bytes = p.instrs.size() * 4;
-
-        u_coverage.set_program_bytes(prog_bytes);
 
         ref_model = new();
         for (int i = 0; i < 256; i++)
@@ -134,11 +129,13 @@ module pipeline_tb;
         total_txns += ref_model.expected_txns.size();
         total_static += p.instrs.size();
 
-        ok &= u_scoreboard.check_retire(nm, dut_n, ref_model.retired, dut_pc, ref_model.pc);
+        ok &= u_scoreboard.check_retire(nm, u_monitor.observed_commits.size(), ref_model.retired, u_monitor.trap_pc_q, ref_model.final_pc);
         ok &= u_scoreboard.check(nm, ref_model.expected_txns, u_monitor.observed_txns);
         ok &= u_scoreboard.check_commits(nm, u_monitor.observed_commits, ref_model.commits);
         ok &= check_final_regs(nm);
+        ok &= !timeout;
         record(nm, seed, ok);
+        if (ref_model.retired >= RUN_BUDGET) $display(" NOTE seed=%0d: ISS hit budget (%0d), program may not terminate", seed, RUN_BUDGET);
     endtask
 
     initial begin
@@ -158,6 +155,42 @@ module pipeline_tb;
         else
             $display("BRINGUP FAIL: timeout=%0d traps=%0d cause=%s",
                      timeout, u_monitor.trap_count, u_monitor.trap_cause_q.name());
+
+        // random test
+        void'($value$plusargs("SEED_OFFSET=%0d", seed_offset));
+        void'($value$plusargs("NUM_SEEDS=%0d", num_seeds));
+        if ($value$plusargs("SINGLE_SEED=%0d", single_seed)) begin
+            single_seed_mode = 1'b1;
+            $display("RANDOM TEST: running single seed %0d", single_seed);
+            run_random_test(single_seed);
+        end
+        else begin
+            $display("RANDOM TEST: running %0d seeds", num_seeds);
+            for (int s = 0; s < num_seeds; s++) begin
+                $display("RANDOM TEST: running seed %0d", s);
+                run_random_test(seed_offset + s);
+            end
+        end
+
+        $display("========================================");
+        $display("SUMMARY: %0d passed, %0d failed | total_txns=%0d, total_retired=%0d",
+                 pass_cnt, fail_cnt, total_txns, total_retired);
+        $display("ASSERTION FAILURES: %0d", u_assertions.fail_count);
+        $display("========================================");
+        if (single_seed_mode) begin
+            if (VACUOUS_K*total_txns < total_static)
+                $display("WARN: single seed sparse in memory (txns=%0d static=%0d)",
+                        total_txns, total_static);
+        end
+        else if (VACUOUS_K*total_txns < total_static) begin
+            $fatal(1, "vacuous regression: txns=%0d static=%0d (density < 1/%0d)",
+                total_txns, total_static, VACUOUS_K);
+        end
+        if (u_assertions.fail_count != 0)
+            $fatal(1, "CORE ASSERTIONS FAILED: %0d", u_assertions.fail_count);
+        if (fail_cnt != 0)
+            $fatal(1, "RANDOM REGRESSION FAILED: %0d/%0d", fail_cnt, pass_cnt + fail_cnt);
+        $display("ALL RANDOM TESTS PASSED");
         $finish;
     end
 

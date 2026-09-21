@@ -22,6 +22,8 @@ module pipeline_monitor (
         observed_commits.delete();
         pend_v = 1'b0;
         trap_count = 0;
+        trap_cause_q = 0;
+        trap_pc_q = 32'b0;
     endtask
 
     always @(p.cb) begin

@@ -142,7 +142,7 @@ module pipeline_scoreboard;
             ok = 0;
         end
         for (int i = 0; i < dut_commits.size(); i++) begin
-            if (dut_commits[i] !== iss_commits[i]) begin
+            if (!commit_equal(dut_commits[i], iss_commits[i])) begin
                 $error("%s COMMITS[%0d] mismatch, DUT: PC=0x%08h, INSTR=0x%08h, NEXT_PC=0x%08h, RD_WE=%b, RD_ADDR=%0d, RD_DATA=0x%08h. \nISS: PC=0x%08h, INSTR=0x%08h, NEXT_PC=0x%08h, RD_WE=%b, RD_ADDR=%0d, RD_DATA=0x%08h", 
                                                   name, i, dut_commits[i].pc, dut_commits[i].instr, dut_commits[i].next_pc, dut_commits[i].rd_we, dut_commits[i].rd_addr, dut_commits[i].rd_data,
                                                   iss_commits[i].pc, iss_commits[i].instr, iss_commits[i].next_pc, iss_commits[i].rd_we, iss_commits[i].rd_addr, iss_commits[i].rd_data);
@@ -150,6 +150,18 @@ module pipeline_scoreboard;
             end
         end
         return ok;
+    endfunction
+    // will report fake mismatch when rd_We == 0, DUT's rd_data is WB mux(don't care).
+    function automatic bit commit_equal(
+        input commit_t dut,
+        input commit_t iss
+    );
+    return
+        (dut.pc      === iss.pc)      &&
+        (dut.instr   === iss.instr)   &&
+        (dut.next_pc === iss.next_pc) &&
+        (dut.rd_we   === iss.rd_we)   &&
+        ((dut.rd_we == 1'b0) || ((dut.rd_we == 1'b1) && (dut.rd_addr === iss.rd_addr) && (dut.rd_data === iss.rd_data)));
     endfunction
 
 endmodule

@@ -14,6 +14,10 @@ module pipeline_memory (
         foreach (imem[i]) imem[i] = EBREAK;
         $readmemh(path, imem);
     endtask
+
+    task automatic clear_dmem();
+        foreach (u_dmem.mem[i]) u_dmem.mem[i] = 32'b0;
+    endtask
     
     task automatic init_mem();
         foreach (imem[i]) imem[i] = 32'h0010_0073;

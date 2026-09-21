@@ -5,16 +5,6 @@ module pl_coverage (
     import pipeline_pkg::*;
     import pl_random_pkg::*;
 
-    int unsigned program_bytes;
-
-    task automatic set_program_bytes(input int unsigned nbytes);
-        program_bytes = nbytes;
-    endtask
-
-    function automatic bit in_program(input logic [31:0] pc);
-        return (pc[1:0] == 2'b00) && (pc < program_bytes);
-    endfunction
-
     function automatic int decode_kind(input logic [31:0] instr);
         logic [6:0] opcode;
         logic [2:0] funct3;
@@ -297,29 +287,29 @@ module pl_coverage (
         prev_branch_valid = 1'b0;
     end
 
-    always @(mem.cb) begin
+    /*always @(mem.cb) begin
         if (mem.cb.rst) begin
             prev_branch_valid = 1'b0;
         end
-        else if (in_program(mem.cb.imem_addr)) begin
+        else if (retire && !retire_exc && in_program(mem.cb.retire_pc)) begin
             int kind;
             bit prev_taken;
             bit prev_backward;
 
             if (prev_branch_valid) begin
-                prev_taken    = (mem.cb.imem_addr == (prev_branch_pc + prev_branch_imm));
+                prev_taken    = ((mem.cb.retire_instr == kind) && (retire_next_pc != retire_pc + 4));
                 prev_backward = ($signed(prev_branch_imm) < 0);
                 branch_cov.sample(prev_branch_kind, prev_taken, prev_backward);
             end
 
-            kind = decode_kind(mem.cb.imem_rdata);
-            instr_cov.sample(mem.cb.imem_rdata[6:0], kind);
+            kind = decode_kind(mem.cb.mem_instr);
+            instr_cov.sample(mem.cb.mem_instr[6:0], kind);
 
             prev_branch_valid = is_branch_kind(kind);
             if (prev_branch_valid) begin
                 prev_branch_kind = kind;
                 prev_branch_pc   = mem.cb.imem_addr;
-                prev_branch_imm  = decode_b_imm(mem.cb.imem_rdata);
+                prev_branch_imm  = decode_b_imm(mem.cb.mem_instr);
             end
 
             if (mem.cb.dmem_req_valid) begin
@@ -335,7 +325,7 @@ module pl_coverage (
         else begin
             prev_branch_valid = 1'b0;
         end
-    end
+    end*/
     final begin
         $display("RV_INSTR_COVERAGE  = %0.2f%%", instr_cov.get_inst_coverage());
         $display("RV_OPCODE_COVERAGE = %0.2f%%", instr_cov.cp_opcode.get_inst_coverage());

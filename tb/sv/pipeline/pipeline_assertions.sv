@@ -43,66 +43,66 @@ module pipeline_assertions (
 
     no_dmem_side_effect_during_reset: assert property (
         @(mem.cb)
-        mem.cb.rst |-> (!mem.cb.dmem_req_valid && !mem.cb.dmem_req_write)
-    ) else fail_count++;
+        mem.cb.rst |-> (mem.cb.dmem_req_valid !== 1'b1 && mem.cb.dmem_req_write !== 1'b1)
+    ) else begin fail_count++; $error("check no_dmem_side_effect_during_reset failed"); end
 
     imem_addr_aligned: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
         mem.cb.imem_addr[1:0] == 2'b00
-    ) else fail_count++;
+    ) else begin fail_count++; $error("check imem_addr_aligned failed"); end
 
     imem_known: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
         !$isunknown({mem.cb.imem_addr, mem.cb.imem_rdata})
-    ) else fail_count++;
+    ) else begin fail_count++; $error("check imem_known failed"); end
 
-    dmem_read_write_exclusive: assert property (
+    dmem_read_wstrb: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
-        !(mem.cb.dmem_req_valid && mem.cb.dmem_req_write)
-    ) else fail_count++;
+        mem.cb.dmem_req_valid && !mem.cb.dmem_req_write |-> (mem.cb.dmem_req_wstrb == 4'b0000)
+    ) else begin fail_count++; $error("check dmem_read_wstrb failed"); end
 
     dmem_ctrl_known: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
         !$isunknown({mem.cb.dmem_req_valid, mem.cb.dmem_req_write, mem.cb.dmem_req_wstrb})
-    ) else fail_count++;
+    ) else begin fail_count++; $error("check dmem_ctrl_known failed"); end
 
     dmem_read_known: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
-        mem.cb.dmem_req_valid && !mem.cb.dmem_req_write |-> !$isunknown({mem.cb.dmem_req_addr, mem.cb.dmem_rsp_rdata})
-    ) else fail_count++;
+        mem.cb.dmem_req_valid && !mem.cb.dmem_req_write |-> !$isunknown({mem.cb.dmem_req_addr})
+    ) else begin fail_count++; $error("check dmem_read_known failed"); end
 
     dmem_write_known: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
         mem.cb.dmem_req_valid && mem.cb.dmem_req_write |-> !$isunknown({mem.cb.dmem_req_addr, mem.cb.dmem_req_wdata, mem.cb.dmem_req_wstrb})
-    ) else fail_count++;
+    ) else begin fail_count++; $error("check dmem_write_known failed"); end
 
     dmem_read_only_for_load: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
-        mem.cb.dmem_req_valid && !mem.cb.dmem_req_write |-> (mem.cb.imem_rdata[6:0] == OPCODE_LOAD)
-    ) else fail_count++;
+        mem.cb.dmem_req_valid && !mem.cb.dmem_req_write |-> (mem.cb.mem_instr[6:0] == OPCODE_LOAD)
+    ) else begin fail_count++; $error("check dmem_read_only_for_load failed"); end
 
     dmem_write_only_for_store: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
-        mem.cb.dmem_req_valid && mem.cb.dmem_req_write |-> (mem.cb.imem_rdata[6:0] == OPCODE_STORE)
-    ) else fail_count++;
+        mem.cb.dmem_req_valid && mem.cb.dmem_req_write |-> (mem.cb.mem_instr[6:0] == OPCODE_STORE)
+    ) else begin fail_count++; $error("check dmem_write_only_for_store failed"); end
 
     a_load_addr_aligned: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
-        mem.cb.dmem_req_valid && !mem.cb.dmem_req_write |-> load_addr_aligned(mem.cb.imem_rdata[14:12], mem.cb.dmem_req_addr[1:0])
-    ) else fail_count++;
+        mem.cb.dmem_req_valid && !mem.cb.dmem_req_write |-> load_addr_aligned(mem.cb.mem_instr[14:12], mem.cb.dmem_req_addr[1:0])
+    ) else begin fail_count++; $error("check a_load_addr_aligned failed"); end
 
     store_wstrb_matches_width_and_addr: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
-        mem.cb.dmem_req_valid && mem.cb.dmem_req_write |-> store_wstrb_ok(mem.cb.imem_rdata[14:12], mem.cb.dmem_req_addr[1:0], mem.cb.dmem_req_wstrb)
-    ) else fail_count++;
+        mem.cb.dmem_req_valid && mem.cb.dmem_req_write |-> store_wstrb_ok(mem.cb.mem_instr[14:12], mem.cb.dmem_req_addr[1:0], mem.cb.dmem_req_wstrb)
+    ) else begin fail_count++; $error("check store_wstrb_matches_width_and_addr failed"); end
 endmodule
