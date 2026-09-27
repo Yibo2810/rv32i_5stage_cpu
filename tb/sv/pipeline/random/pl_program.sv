@@ -37,15 +37,26 @@ class pl_program;
                     instr_kind_e br = br_kinds[$urandom_range(5, 0)];
                     bit          tk = $urandom_range(1, 0);
                     int unsigned M = $urandom_range(3, 1);
-                    if (instrs.size() + (M + 3) <= IMEM_WORDS)
-                        emit_fwd_branch(br, tk, M);
-                    else
-                        push_straightline();
+                    logic [1:0]  prelude;
+                    randcase
+                        30: prelude = 2'b00;
+                        35: prelude = 2'b01;
+                        35: prelude = 2'b10;
+                    endcase
+                            if (instrs.size() + (M + 5) <= IMEM_WORDS)
+                                emit_fwd_branch(br, tk, M, prelude);
+                            else
+                                push_straightline();
                 end
                 5: begin
                     int unsigned M = $urandom_range(3, 1);
-                    if (instrs.size() + (M + 3) <= IMEM_WORDS)
-                        emit_jalr(M);
+                    bit jal_sw;
+                    randcase
+                        50: jal_sw = 1'b0;
+                        50: jal_sw = 1'b1;
+                    endcase
+                    if (instrs.size() + (M + 5) <= IMEM_WORDS)
+                        emit_jalr(M, jal_sw);
                     else
                         push_straightline();
                 end
@@ -178,7 +189,7 @@ class pl_program;
         instrs.push_back(mk_fixed(ld_kind,    xLoad, 5'd0,  5'd0,  addr));
     endfunction
 
-    function automatic void emit_fwd_branch(instr_kind_e br, bit taken, int unsigned M);
+    function automatic void emit_fwd_branch(instr_kind_e br, bit taken, int unsigned M, logic [1:0] prelude);
         logic [4:0] S1 = 5'd29;
         logic [4:0] S2 = 5'd30;
         int base, br_idx, skip_end, br_off;
@@ -187,28 +198,50 @@ class pl_program;
         base     = instrs.size();
         br_idx   = base + 2;
         skip_end = base + 3 + M;
-        br_off   = (skip_end - br_idx) * 4;
+        br_off   = (M + 1) * 4;
 
         pick_operands(br, taken, a, b);
-
-        instrs.push_back(mk_fixed(INSTR_ADDI, S1, 5'd0, 5'd0, a));
-        instrs.push_back(mk_fixed(INSTR_ADDI, S2, 5'd0, 5'd0, b));
-        instrs.push_back(mk_fixed(br, 5'd0, S1, S2, br_off));
+        if (prelude == 2'b00) begin
+            instrs.push_back(mk_fixed(INSTR_ADDI, S1, 5'd0, 5'd0, a));
+            instrs.push_back(mk_fixed(INSTR_ADDI, S2, 5'd0, 5'd0, b));
+            instrs.push_back(mk_fixed(br, 5'd0, S1, S2, br_off));
+        end else if (prelude == 2'b01) begin
+            instrs.push_back(mk_fixed(INSTR_ADDI, S1, 5'd0, 5'd0, a));
+            instrs.push_back(mk_fixed(INSTR_ADDI, S2, 5'd0, 5'd0, b));
+            instrs.push_back(mk_fixed(INSTR_SB, 5'd0, 5'd0, 5'd0, 32));
+            instrs.push_back(mk_fixed(br, 5'd0, S1, S2, br_off));
+        end else if (prelude == 2'b10) begin
+            instrs.push_back(mk_fixed(INSTR_ADDI, S1, 5'd0, 5'd0, a));
+            instrs.push_back(mk_fixed(INSTR_SW, 5'd0, 5'd0, S1, 128));
+            instrs.push_back(mk_fixed(INSTR_ADDI, S2, 5'd0, 5'd0, b));
+            instrs.push_back(mk_fixed(INSTR_LW, S1, 5'd0, 5'd0, 128));
+            instrs.push_back(mk_fixed(br, 5'd0, S1, S2, br_off));
+        end else begin $error("Gerneated wrong fwd_branch!"); end
         for (int j = 0; j < M; j++) push_straightline();
     endfunction
 
-    function automatic void emit_jalr(int unsigned M);
+    function automatic void emit_jalr(int unsigned M, bit jal_sw);
         logic [4:0] xS = 5'd28;
+        logic [4:0] xT = 5'd27;
         int base, jalr_idx, land_idx, abs;
-
         base     = instrs.size();
-        jalr_idx = base + 1;
-        land_idx = base + 2 + M;
-        abs      = 4 * land_idx;
-        if (abs > 2047) begin push_straightline(); return; end
-
-        instrs.push_back(mk_fixed(INSTR_ADDI, xS,   5'd0, 5'd0, abs));
-        instrs.push_back(mk_fixed(INSTR_JALR, 5'd1, xS,   5'd0, 0));
+        if (jal_sw == 1'b0) begin
+            jalr_idx = base + 1;
+            land_idx = base + 2 + M;
+            abs      = 4 * land_idx;
+            if (abs > 2047) begin push_straightline(); return; end
+            instrs.push_back(mk_fixed(INSTR_ADDI, xS,   5'd0, 5'd0, abs));
+            instrs.push_back(mk_fixed(INSTR_JALR, 5'd1, xS,   5'd0, 0));
+        end else if (jal_sw == 1'b1) begin
+            jalr_idx = base + 3;
+            land_idx = base + 4 + M;
+            abs      = 4 * land_idx;
+            if (abs > 2047) begin push_straightline(); return; end
+            instrs.push_back(mk_fixed(INSTR_ADDI, xT,   5'd0, 5'd0, abs));
+            instrs.push_back(mk_fixed(INSTR_SW, 5'd0, 5'd0, xT, 64));
+            instrs.push_back(mk_fixed(INSTR_LW, xS, 5'd0, 5'd0, 64));
+            instrs.push_back(mk_fixed(INSTR_JALR, 5'd1, xS,   5'd0, 0));
+        end 
         for (int j = 0; j < M; j++) push_straightline();
     endfunction
 

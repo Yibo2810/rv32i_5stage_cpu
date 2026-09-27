@@ -187,7 +187,7 @@ import pipeline_pkg::*;(
     .idex_rs1_addr(idex_q.rs1_addr),
     .idex_rs2_addr(idex_q.rs2_addr),
     .exmem_reg_write(exmem_q.ctrl_m.reg_write),
-    .exmem_reg_read(exmem_q.ctrl_m.mem_read),
+    .exmem_mem_read(exmem_q.ctrl_m.mem_read),
     .exmem_rd_addr(exmem_q.rd_addr),
     .memwb_reg_write(memwb_q.ctrl_wb.reg_write),
     .memwb_rd_addr(memwb_q.rd_addr),

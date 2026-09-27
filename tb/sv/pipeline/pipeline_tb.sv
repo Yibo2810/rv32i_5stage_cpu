@@ -110,6 +110,7 @@ module pipeline_tb;
         pl_program p = new();
         string nm = $sformatf("random_seed_%0d", seed);
         bit ok = 1'b1;
+        int unsigned sva_before = u_core.u_sva.fail_count;
 
         p.build(seed);
         u_memory.clear_dmem();
@@ -134,6 +135,7 @@ module pipeline_tb;
         ok &= u_scoreboard.check_commits(nm, u_monitor.observed_commits, ref_model.commits);
         ok &= check_final_regs(nm);
         ok &= !timeout;
+        ok &= (u_core.u_sva.fail_count == sva_before);
         record(nm, seed, ok);
         if (ref_model.retired >= RUN_BUDGET) $display(" NOTE seed=%0d: ISS hit budget (%0d), program may not terminate", seed, RUN_BUDGET);
     endtask
@@ -176,6 +178,7 @@ module pipeline_tb;
         $display("SUMMARY: %0d passed, %0d failed | total_txns=%0d, total_retired=%0d",
                  pass_cnt, fail_cnt, total_txns, total_retired);
         $display("ASSERTION FAILURES: %0d", u_assertions.fail_count);
+        $display("PIPELINE SVA FAILURES: %0d", u_core.u_sva.fail_count);
         $display("========================================");
         if (single_seed_mode) begin
             if (VACUOUS_K*total_txns < total_static)
@@ -188,6 +191,8 @@ module pipeline_tb;
         end
         if (u_assertions.fail_count != 0)
             $fatal(1, "CORE ASSERTIONS FAILED: %0d", u_assertions.fail_count);
+        if (u_core.u_sva.fail_count != 0)
+            $fatal(1, "CORE SVA_BIND FAILED: %0d", u_core.u_sva.fail_count);    
         if (fail_cnt != 0)
             $fatal(1, "RANDOM REGRESSION FAILED: %0d/%0d", fail_cnt, pass_cnt + fail_cnt);
         $display("ALL RANDOM TESTS PASSED");
