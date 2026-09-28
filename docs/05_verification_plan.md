@@ -6,11 +6,11 @@ The project has two verification states side by side:
 
 | Phase | Flow | Status |
 |---|---|---|
-| Single-cycle core (v0.3.0 directed → v0.4.0 constrained-random) | `tb/sv/core/` under VCS | Frozen and verified as of v0.4.0; **not re-run** since `control_unit`, `load_store_unit` and `core_single_cycle` were touched while landing the pipeline |
-| Five-stage pipeline (v0.5.0, in progress) | `tb/sv/pipeline/` under VCS | Directed bring-up only: six directed programs, "halted on `ebreak`" verdict, no oracle inside the testbench, no random flow |
+| Single-cycle core (v0.3.0 directed → v0.4.0 constrained-random) | `tb/sv/core/` under VCS | Frozen and verified as of v0.4.0; re-run on the v0.5.0 tree after the shared leaf modules were edited: 200 seeds, zero assertion failures, 100% of defined bins |
+| Five-stage pipeline (v0.5.0) | `tb/sv/pipeline/` under VCS | Frozen and verified in simulation: ISS lockstep on the commit stream, 500 seeds, interface and white-box assertions gating the verdict, coverage closed except an enumerated waiver list; not synthesized |
 
 The pipeline state is documented in detail in
-[11_v0_5_0_pipeline_bringup.md](11_v0_5_0_pipeline_bringup.md); its design is in
+[11_v0_5_0_milestone.md](11_v0_5_0_milestone.md); its design is in
 [03_pipeline_design.md](03_pipeline_design.md) and
 [04_hazard_forwarding.md](04_hazard_forwarding.md).
 
@@ -170,81 +170,65 @@ Generator constraints should include:
 Random tests should be added only when they have an oracle and can be
 reproduced from a seed.
 
-## Five-Stage Pipeline Verification (v0.5.0, in progress)
+## Five-Stage Pipeline Verification (v0.5.0)
 
-The pipeline phase started from that baseline: the generator, the ISS, the
-scoreboard concepts and the expected-file format are all microarchitecture
-independent, so the transition is mostly a change of *view* for the monitor
-(from "what is on the bus" to "what retired").
+The pipeline phase kept the single-cycle design and changed the view: the
+generator, the ISS and the scoreboard concepts are microarchitecture
+independent, so the port was mostly a move from "what is on the bus" to "what
+retired".
 
 The key rule is unchanged:
 
 **the scoreboard checks architectural behavior; the monitor adapts to the
 microarchitecture.**
 
-### Implemented today
+### Environment
 
 | File | Responsibility |
 |---|---|
-| `tb/sv/pipeline/pipeline_tb.sv` | Reset, load one `.hex`, run until `halted`, dump, verdict |
-| `tb/sv/pipeline/pipeline_probe_if.sv` | `pipeline_probe_if`: core/memory wires with `pl_core`, `bram`, `pipeline_monitor` modports and a clocking block |
-| `tb/sv/pipeline/pipeline_memory.sv` | 256-word imem pre-filled with `ebreak` + `$readmemh` overlay; dmem = `dmem_bram #(.DEPTH(256))` |
-| `tb/sv/pipeline/pipeline_monitor.sv` | Passive capture of commits (from `wb_retire`), memory transactions (paired request/response), and trap count/cause/PC |
-| `tb/filelists/pipeline.f` | Pipeline compile order (scoreboard/assertions/random entries currently commented out) |
-| `tb/filelists/pipeline_rtl.f` | RTL compile order, shared by `make pl-lint` and `make pl-build` |
+| `tb/sv/pipeline/pipeline_tb.sv` | Bring-up smoke program, then the seed loop: build, clear data memory, ISS, run, four checks, per-seed assertion gating, summary |
+| `tb/sv/pipeline/pipeline_probe_if.sv` | Core/memory wires plus MEM-stage identity (`mem_pc`, `mem_instr`) and the retire port, with a clocking block |
+| `tb/sv/pipeline/pipeline_memory.sv` | 256-word imem pre-filled with `ebreak`; `dmem_bram #(.DEPTH(256))`, cleared per seed |
+| `tb/sv/pipeline/pipeline_monitor.sv` | Retired instructions (from `wb_retire`, excluding the trapping one), memory transactions (request paired with response), trap events |
+| `tb/sv/pipeline/pipeline_scoreboard.sv` | Commit stream (per instruction; `rd_addr`/`rd_data` compared only when `rd_we = 1`), transaction stream, retire count/final PC, register file |
+| `tb/sv/pipeline/pipeline_assertions.sv` | 11 interface properties on the memory ports and the MEM-stage instruction |
+| `tb/sv/pipeline/pipeline_sva_bind.sv` | 13 white-box properties bound into `core_5stage`; forwarding / load-use / redirect covergroups |
+| `tb/sv/pipeline/random/` | `pl_instr`, `pl_program` (hazard bias and pipeline templates), `pl_ref_model` (ISS), `pl_coverage` (ISA coverage at retirement) |
 
-The monitor watches a genuine retire view: `retire = wb_retire`,
-`retire_pc = memwb_q.pc`, `retire_next_pc = memwb_q.next_pc`, plus the register
-write port (`wb_w_en`/`wb_rd_addr`/`wb_rd_data`). That is the abstraction the
-single-cycle phase lacked.
+### Rules that came out of the port
 
-### Verdict today
+- **Both sides of a property must belong to the same pipeline stage.** A
+  memory request is judged against the MEM-stage instruction, never against the
+  instruction being fetched.
+- **Compare a field only when it is defined.** `rd_data` is meaningless when
+  `rd_we = 0`; the `rd` field of a store or branch is never encoded; the
+  `rs1`/`rs2` fields of instructions that do not read registers are immediate
+  bits. Each of these produced a false failure or a silently wrong statistic.
+- **Combinational control is checked in the same cycle** (`|->`), and events
+  that a higher-priority hazard can freeze are only checked in the cycle they
+  act.
+- **Put a property's conclusion on a single-cause signal.** `pc_stall` has three
+  causes, so "the stall ended" is checked on the hazard signal itself.
+- **Every assertion has a cover on its antecedent**, and every checker must be
+  able to fail the regression: white-box failures are compared per seed.
+- **Structural coverage holes are fixed in the generator's templates**, not by
+  running more seeds.
+- **Checkers are validated by injecting bugs.** Four mutants of the hazard logic
+  each fail the regression.
 
-`BRINGUP DONE` iff no timeout and exactly one trap with cause
-`EXC_BREAKPOINT`. Memory transactions and commits are dumped for inspection but
-**not compared against expected values inside the testbench**.
+### Result and what remains
 
-Six directed programs were run on 2026-09-14 and all six halted on `ebreak`
-with plausible commit/transaction counts. As an off-line check, each program's
-observed transaction stream was compared against
-`programs/expected/<test>.expected` and matched line for line (58 transactions
-total), with 51/51 final signature words matching when the observed writes are
-replayed into a byte-level data-memory model. Details and the per-test table:
-[11_v0_5_0_pipeline_bringup.md](11_v0_5_0_pipeline_bringup.md).
-
-### Not yet in place
-
-- **No oracle in the testbench.** The expected-file comparison above is an
-  ad-hoc script run, not a checker.
-- **Scoreboard and assertions not adapted.** `pipeline_scoreboard.sv` and
-  `pipeline_assertions.sv` are still single-cycle copies (`core_verif_pkg` /
-  `core_mem_if` based) and are excluded from the pipeline filelist.
-- **No random flow.** `tb/sv/pipeline/random/pl_*.sv` (package `rv_random_pkg`)
-  exist but are commented out of `tb/filelists/pipeline.f`; the testbench has no
-  random mode.
-- **No coverage.** No `-cm` targets and no pipeline covergroups.
-- **Missing directed tests.** `hazard_test.S` is a stub; there is no
-  misaligned load/store, illegal-instruction, `ecall`, request-back-pressure, or
-  deliberate hazard-chain program in `programs/asm/`.
-- **Single-cycle regression not re-run** since the shared leaf modules changed.
-
-### Planned pipeline checks
+The release result, coverage numbers, waiver list and mutation table are in
+[11_v0_5_0_milestone.md](11_v0_5_0_milestone.md). Still open after v0.5.0:
 
 ```text
-commit/retire monitor        already present
-expected TXN/SIG per test    move the off-line comparison into the scoreboard
-                            (memory transactions + final dmem signatures)
-ISS lockstep                 compare retire count, final PC and architectural state
-                            against rv_ref_model once the random flow is enabled
-pipeline assertions          single retire per instruction; no flush during a
-                            memory freeze; req_sent -> !req_valid;
-                            !(wb_exc_pending && req_sent); halted -> no request
-                            and no writeback; trap_cause valid only with trap_valid
-hazard-specific directed     load-use, double forwarding, EX/MEM load guard,
-  tests                      WB_PC4 forwarding, trap during a freeze
-back-pressure stimulus       randomise dmem_req_ready and verify request stability
-coverage                     hazards, redirects, stalls, trap causes, widths
+back-pressure stimulus       randomise dmem_req_ready and response latency;
+                             add request-stability assertions
+trap paths                   illegal instruction, ecall, misaligned access,
+                             trap with a younger store in MEM
+waived coverage              sub-word loads into branches/JALR/addresses,
+                             load into branch rs2, deferred JAL/JALR redirects,
+                             control-flow instruction in a redirect shadow
+external reference           riscv-arch-test signatures, Spike or Sail
+directed hazard tests        programs/asm/hazard_test.S is still a stub
 ```
-
-Order of work: get an oracle inside the testbench first (directed), then hazard
-directed tests, then enable the random flow, then coverage closure.

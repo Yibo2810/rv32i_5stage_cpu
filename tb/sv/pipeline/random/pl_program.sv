@@ -39,9 +39,10 @@ class pl_program;
                     int unsigned M = $urandom_range(3, 1);
                     logic [1:0]  prelude;
                     randcase
-                        30: prelude = 2'b00;
-                        35: prelude = 2'b01;
-                        35: prelude = 2'b10;
+                        25: prelude = 2'b00;
+                        25: prelude = 2'b01;
+                        25: prelude = 2'b10;
+                        25: prelude = 2'b11;
                     endcase
                             if (instrs.size() + (M + 5) <= IMEM_WORDS)
                                 emit_fwd_branch(br, tk, M, prelude);
@@ -62,9 +63,10 @@ class pl_program;
                 end
                 10: begin
                     if (instrs.size() + 4 <= IMEM_WORDS)
-                        emit_store_load_pair();
-                    else
-                        push_straightline();
+                        randcase
+                            50: emit_store_load_pair();
+                            50: emit_mem_base();
+                        endcase
                 end
             endcase
         end
@@ -133,6 +135,36 @@ class pl_program;
             instrs.push_back(mk_fixed(INSTR_BNE, 5'd0, 5'd31, 5'd0, back_off));
         else
             instrs.push_back(mk_fixed(INSTR_JAL, 5'd0, 5'd0,  5'd0, back_off));
+    endfunction
+
+    function automatic void emit_mem_base();
+        logic [4:0]  xB   = 5'd25;
+        logic [4:0]  xT   = 5'd24;
+        logic [4:0]  xD   = 5'd23;
+        int unsigned base = 4 * $urandom_range(64, 0);
+        int unsigned off  = 4 * $urandom_range(63, 0);
+        int unsigned ptr  = 4 * $urandom_range(127, 0);
+        bit          st   = $urandom_range(1, 0);
+        instr_kind_e k    = st ? INSTR_SW : INSTR_LW;
+        logic [4:0]  rd   = st ? 5'd0 : xD;
+
+        randcase
+            40: begin
+                instrs.push_back(mk_fixed(INSTR_ADDI, xB, 5'd0, 5'd0, base));
+                instrs.push_back(mk_fixed(k, rd, xB, xD, off));
+            end
+            30: begin
+                instrs.push_back(mk_fixed(INSTR_ADDI, xB, 5'd0, 5'd0, base));
+                instrs.push_back(mk_fixed(INSTR_ADDI, 5'd0, 5'd0, 5'd0, 0));
+                instrs.push_back(mk_fixed(k, rd, xB, xD, off));
+            end
+            30: begin
+                instrs.push_back(mk_fixed(INSTR_ADDI, xT, 5'd0, 5'd0, base));
+                instrs.push_back(mk_fixed(INSTR_SW,   5'd0, 5'd0, xT, ptr));
+                instrs.push_back(mk_fixed(INSTR_LW,   xB, 5'd0, 5'd0, ptr));
+                instrs.push_back(mk_fixed(k, rd, xB, xD, off));
+            end
+        endcase
     endfunction
 
     function automatic void emit_store_load_pair();
@@ -216,7 +248,11 @@ class pl_program;
             instrs.push_back(mk_fixed(INSTR_ADDI, S2, 5'd0, 5'd0, b));
             instrs.push_back(mk_fixed(INSTR_LW, S1, 5'd0, 5'd0, 128));
             instrs.push_back(mk_fixed(br, 5'd0, S1, S2, br_off));
-        end else begin $error("Gerneated wrong fwd_branch!"); end
+        end else begin 
+            instrs.push_back(mk_fixed(INSTR_ADDI, S2, 5'd0, 5'd0, b));
+            instrs.push_back(mk_fixed(INSTR_ADDI, S1, 5'd0, 5'd0, a));
+            instrs.push_back(mk_fixed(br, 5'd0, S1, S2, br_off));
+         end
         for (int j = 0; j < M; j++) push_straightline();
     endfunction
 

@@ -271,61 +271,27 @@ module pl_coverage (
         }
     endgroup
 
-    cg_instr instr_cov;
-    cg_mem   mem_cov;
-    cg_branch branch_cov;
+    cg_instr instr_cov = new();
+    cg_mem   mem_cov = new();
+    cg_branch branch_cov = new();
 
-    bit          prev_branch_valid;
-    int          prev_branch_kind;
-    logic [31:0] prev_branch_pc;
-    logic [31:0] prev_branch_imm;
-
-    initial begin
-        instr_cov = new();
-        mem_cov   = new();
-        branch_cov = new();
-        prev_branch_valid = 1'b0;
+    always @(mem.cb) begin
+        if (!mem.cb.rst && mem.cb.retire && !mem.cb.retire_exc) begin
+            int kind;
+            kind = decode_kind(mem.cb.retire_instr);
+            instr_cov.sample(mem.cb.retire_instr[6:0], kind);
+            if (is_branch_kind(kind))
+                branch_cov.sample(kind, mem.cb.retire_next_pc != mem.cb.retire_pc + 32'd4,
+                                $signed(decode_b_imm(mem.cb.retire_instr)) < 0);
+        end
     end
 
-    /*always @(mem.cb) begin
-        if (mem.cb.rst) begin
-            prev_branch_valid = 1'b0;
-        end
-        else if (retire && !retire_exc && in_program(mem.cb.retire_pc)) begin
-            int kind;
-            bit prev_taken;
-            bit prev_backward;
-
-            if (prev_branch_valid) begin
-                prev_taken    = ((mem.cb.retire_instr == kind) && (retire_next_pc != retire_pc + 4));
-                prev_backward = ($signed(prev_branch_imm) < 0);
-                branch_cov.sample(prev_branch_kind, prev_taken, prev_backward);
-            end
-
-            kind = decode_kind(mem.cb.mem_instr);
-            instr_cov.sample(mem.cb.mem_instr[6:0], kind);
-
-            prev_branch_valid = is_branch_kind(kind);
-            if (prev_branch_valid) begin
-                prev_branch_kind = kind;
-                prev_branch_pc   = mem.cb.imem_addr;
-                prev_branch_imm  = decode_b_imm(mem.cb.mem_instr);
-            end
-
-            if (mem.cb.dmem_req_valid) begin
-                mem_cov.sample(
-                    kind,
-                    !mem.cb.dmem_req_write,
-                    mem.cb.dmem_req_write,
-                    mem.cb.dmem_req_addr[1:0],
-                    mem.cb.dmem_req_wstrb
-                );
-            end
-        end
-        else begin
-            prev_branch_valid = 1'b0;
-        end
-    end*/
+    always @(mem.cb) begin
+        if (!mem.cb.rst && mem.cb.dmem_req_valid && mem.cb.dmem_req_ready)
+            mem_cov.sample(decode_kind(mem.cb.mem_instr),
+                        !mem.cb.dmem_req_write, mem.cb.dmem_req_write,
+                        mem.cb.dmem_req_addr[1:0], mem.cb.dmem_req_wstrb);
+    end
     final begin
         $display("RV_INSTR_COVERAGE  = %0.2f%%", instr_cov.get_inst_coverage());
         $display("RV_OPCODE_COVERAGE = %0.2f%%", instr_cov.cp_opcode.get_inst_coverage());

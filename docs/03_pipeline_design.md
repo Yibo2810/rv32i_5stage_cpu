@@ -1,8 +1,7 @@
 # Pipeline Design (Five-Stage)
 
-Status: **implemented in RTL, directed bring-up only — not verified.**
-Last updated: 2026-09-14 (branch `feature/pipeline-5stage`, working tree on top of
-`bf50ee1`).
+Status: **frozen in v0.5.0 — verified in simulation, not synthesized.**
+Last updated: 2026-09-28 (branch `feature/pipeline-5stage`).
 
 This document describes the five-stage pipeline that replaces the verified
 single-cycle datapath: the stage partition, the pipeline register payloads, the
@@ -15,7 +14,7 @@ Related documents:
 |---|---|
 | [04_hazard_forwarding.md](04_hazard_forwarding.md) | Forwarding, load-use stall, redirect flush, global freeze, hazard priority |
 | [05_verification_plan.md](05_verification_plan.md) | What is checked today, what is not, and the next verification steps |
-| [11_v0_5_0_pipeline_bringup.md](11_v0_5_0_pipeline_bringup.md) | Current milestone state and the evidence collected so far |
+| [11_v0_5_0_milestone.md](11_v0_5_0_milestone.md) | v0.5.0 freeze: regression, assertions, coverage, waivers, known limitations |
 | [09_v0_4_0_milestone.md](09_v0_4_0_milestone.md) | Frozen single-cycle baseline the pipeline reuses |
 
 The block is **not** a rewrite of the single-cycle core: the leaf modules stay
@@ -397,19 +396,24 @@ sampled together with `trap_valid`.
 
 ---
 
-## 9. Status Evidence (2026-09-14)
+## 9. Status Evidence
+
+v0.5.0 release evidence (2026-09-28):
 
 ```text
-verilator --lint-only -Wall -Wno-fatal -sv -f tb/filelists/pipeline_rtl.f --top-module core_5stage
-  -> Verilator 5.048 : 0 errors; warnings EOFNEWLINE x4, IMPORTSTAR x3,
-     PINMISSING x3 (legacy control_unit ports), UNUSEDPARAM x1, UNUSEDSIGNAL x4
+make pl-lint
+  -> 0 errors; warnings UNUSEDSIGNAL x4, EOFNEWLINE x4, PINMISSING x3
+     (legacy control_unit ports), IMPORTSTAR x3, UNUSEDPARAM x1
 
-vcs -full64 -sverilog -top pipeline_tb -f tb/filelists/pipeline.f
-  -> compiles and elaborates (Synopsys VCS W-2024.09-SP1)
+make pl-run ARGS="+NUM_SEEDS=500 +SEED_OFFSET=1"
+  -> SUMMARY: 500 passed, 0 failed
+     ASSERTION FAILURES: 0
+     PIPELINE SVA FAILURES: 0
+     ALL RANDOM TESTS PASSED
 ```
 
-Functional status: **directed bring-up only.** See
-[11_v0_5_0_pipeline_bringup.md](11_v0_5_0_pipeline_bringup.md) for the six
-directed programs that run today and
-[05_verification_plan.md](05_verification_plan.md) for what is still missing
-(no in-testbench oracle, no pipeline scoreboard, no random regression yet).
+The regression compares every retired instruction against the ISS; see
+[11_v0_5_0_milestone.md](11_v0_5_0_milestone.md) for the assertions, the
+coverage results and waivers, the mutation check, and the known limitations
+(not synthesized; combinational instruction fetch; no memory back-pressure;
+only the terminating `ebreak` trap exercised).

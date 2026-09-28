@@ -13,6 +13,15 @@
 | 9 | 2026-06-18 | Illegal driver combination through a task call chain | TB construction | Compile error, misleading location |
 | 10 | 2026-07-07 | 1290 loads, zero non-zero data | Coverage hole | Anti-vacuity coverage bin |
 | 11 | 2026-07-08 | Every backward jump was a JAL | Coverage hole | Review; no bin existed |
+| 12 | 2026-09-19 | Pipeline random test task defined but never called; coverage 0% | TB construction | 0% coverage on every group |
+| 13 | 2026-09-20 | Memory-request assertions read the IF-stage instruction | Checker (stage alignment) | 25 false failures on the bring-up program |
+| 14 | 2026-09-20 | Commit comparison included `rd_data` when `rd_we = 0` | Checker (don't-care field) | 29 of 30 seeds failed; 294 mismatches, all `rd_data` of branches/stores |
+| 15 | 2026-09-18 | Hazard-bias producer taken from a store's never-encoded `rd` | Stimulus (dead field) | Code review of the bias design |
+| 16 | 2026-09-18 | Hard constraint `rs1 == c` silently removed loads/stores | Stimulus (solver) | Reasoning about the constraint; no error was raised |
+| 17 | 2026-09-20 | Textbook flush and load-use assertions misfired on correct RTL | Checker (timing/priority) | Failure counts equal to antecedent counts (1516, 43) |
+| 18 | 2026-09-20 | Redirect-during-memory-stall and load-into-branch never occurred | Coverage hole (template shape) | Cover counts of zero at 200 and 500 seeds |
+| 19 | 2026-09-27 | White-box assertions did not gate the verdict; counter keys crossed | Checker (verdict) | Injected bug reported under the wrong name |
+| 20 | 2026-09-27 | Backward `JAL` counted as forwarding in coverage | Coverage (dead field) | Unexpected bin in a per-bin tally |
 
 ---
 
@@ -40,3 +49,20 @@
 7. **Bit-slicing logic is guilty until every bit is excited** — by random
    fields wide enough to reach the boundaries, or by an independent
    bit-exact model (Cases 1, 11).
+8. **A field is meaningful only when the encoding or a valid bit says so.**
+   The same mistake appeared four times in one phase — a store's `rd` used as
+   a producer (Case 15), `rd_data` compared with `rd_we = 0` (Case 14), and
+   immediate bits read as `rs1`/`rs2` in an assertion decode and in coverage
+   (Case 20).
+9. **In a pipeline, "the same cycle" is not "the same instruction."** Every
+   property and covergroup has to name the stage each operand comes from
+   (Case 13), and whether a control signal is combinational or registered
+   (Case 17).
+10. **When a failure count equals an antecedent count, suspect the property,
+    not the design** (Case 17).
+11. **A zero that survives more seeds is structural.** It is fixed by changing
+    the generator's templates, not by running longer (Case 18); a bin the RTL
+    cannot reach is written as an assumption property plus `ignore_bins`.
+12. **Test the checkers.** Injecting four hazard-logic bugs showed which
+    properties could see which bug — a property that restates the mechanism
+    missed one that a property stating the goal caught.

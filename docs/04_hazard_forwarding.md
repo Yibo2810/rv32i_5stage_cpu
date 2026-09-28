@@ -1,14 +1,14 @@
 # Hazard Control and Forwarding
 
-Status: **implemented in RTL, directed bring-up only — not verified.**
-Last updated: 2026-09-14.
+Status: **frozen in v0.5.0 — verified in simulation, not synthesized.**
+Last updated: 2026-09-28.
 
 This document describes how the five-stage pipeline keeps instruction ordering:
 the two forwarding paths, the load-use stall, the redirect flush, the memory
 stall freeze, and the priority order that arbitrates them.
 
 Design and interface context: [03_pipeline_design.md](03_pipeline_design.md).
-Current verification state: [11_v0_5_0_pipeline_bringup.md](11_v0_5_0_pipeline_bringup.md).
+Verification state: [11_v0_5_0_milestone.md](11_v0_5_0_milestone.md).
 
 ---
 
@@ -51,9 +51,14 @@ end
 `WB_MEM` (a load) deliberately contributes nothing here: in EX/MEM the load's
 data does not exist yet — `alu_result` holds its *address*. A dependent
 instruction in EX with the load in EX/MEM is therefore stalled instead (§3), and
-picks the value up from MEM/WB one cycle later. `WB_PC4` has to be selectable
-here because `jal`/`jalr` link values are produced in EX and consumed by the
-next instruction before they ever reach WB.
+picks the value up from MEM/WB one cycle later.
+
+`WB_PC4` is selectable here for completeness, but **it is unreachable in the
+current design**: a `jal`/`jalr` always redirects in EX and flushes both younger
+slots, so no valid instruction is in EX while the jump sits in EX/MEM or MEM/WB.
+The jump target reads the link value through the WB→ID bypass instead. The
+verification environment states this as two assumption properties; the arm
+becomes live once jumps stop flushing (for example with branch prediction).
 
 ### 2.2 Selection rules (`forwarding_unit.sv`)
 
@@ -309,34 +314,26 @@ sense that it is evaluated; branch 2 wins.)
 
 ## 9. Status Evidence
 
-Tool state (2026-09-14): Verilator 5.048 `--lint-only -Wall` reports 0 errors on
-`tb/filelists/pipeline_rtl.f`; VCS W-2024.09-SP1 compiles and elaborates
-`pipeline_tb`.
+Frozen in v0.5.0 (2026-09-28). The constrained-random regression
+(`make pl-run ARGS="+NUM_SEEDS=500 +SEED_OFFSET=1"`) passes 500 seeds with zero
+assertion failures; every mechanism in this document is checked by assertions
+and measured by coverage:
 
-Functional evidence is limited to the six directed programs in the bring-up
-testbench; see [11_v0_5_0_pipeline_bringup.md](11_v0_5_0_pipeline_bringup.md)
-for the run tables, the transaction/signature cross-check, and the cycle
-accounting. Measured from the committed instruction streams, those programs do
-exercise every mechanism in this document at least once:
+| Mechanism | Checked by | Measured (500 seeds) |
+|---|---|---|
+| EX/MEM and MEM/WB forwarding, EX/MEM priority | `forward_priority_rs{1,2}`, `forward_priority2_rs{1,2}`; commit-stream lockstep | all 9 `fwd_a × fwd_b` combinations; every consumer kind including load/store address bases |
+| Load-use stall | `load_use_assert`, `load_instr_when_stall` | 728 acted stalls; consumers: ALU, store data, load address (pointer chasing), branch, `JALR` |
+| Redirect flush | `flush_redirect` (same cycle), `retire_check` (commit-PC continuity) | 3820 redirect cycles; 133 of them deferred by a memory stall |
+| Memory freeze | `retire_once`, `pc_stall_assert` | 5701 memory-stall cycles |
+| `WB_PC4` forwarding | `assume_jump_exmem_bubble`, `assume_jump_memwb_bubble` | unreachable by design (see §2.1) |
 
-| Mechanism | Where it fires today |
-|---|---|
-| EX/MEM forwarding | every program (distance-1 ALU-result dependency; 10/12/24/7/6/5 times) |
-| MEM/WB forwarding | `branch_matrix_test` (12), `load_store_width_test` (1), `x0_test` (1) |
-| WB→ID bypass | `alu_rtype_test` (1), `load_store_width_test` (1) |
-| `WB_PC4` forwarding | `jump_u_type_test`: one `jal` link value consumed by the next instruction |
-| Load-use stall | `load_store_width_test` (5), `x0_test` (2) — and the cycle accounting closes with exactly those counts |
-| Redirect flush | `branch_matrix_test` (12 taken redirects), `jump_u_type_test` (3) |
-| Memory freeze | all 58 load/store transactions (2 cycles each in MEM) |
+Four injected hazard-logic bugs (no bubble on load-use, retire not gated by the
+memory stall, redirect not flushing ID/EX, reversed forwarding priority) each
+fail the regression. Not covered in v0.5.0: memory back-pressure
+(`req_ready` never de-asserted), trap paths other than the terminating
+`ebreak`, and the waived coverage bins listed in
+[11_v0_5_0_milestone.md](11_v0_5_0_milestone.md) §5.3.
 
-What is still **not** checked:
-
-- deliberate deep RAW chains and every-corner hazard tests — `hazard_test.S` is
-  still a stub (TODO comment, empty `.hex`, so the run halts on the preloaded
-  `ebreak` image without executing anything);
-- multiple outstanding/back-to-back memory transactions with `req_ready` de-asserted
-  (the request-stability rule has no stimulus in the repository);
-- trap during a memory freeze and other trap/flush/redirect interleavings;
-- misaligned load/store, illegal instruction, and `ecall` trap paths;
-- any random/stress stimulus, coverage, or assertion (see
-  [05_verification_plan.md](05_verification_plan.md)).
+The 2026-09-14 directed bring-up listed `jump_u_type_test` as exercising
+`WB_PC4` forwarding; that was based on static instruction order and is
+corrected in the milestone document (Appendix A).
