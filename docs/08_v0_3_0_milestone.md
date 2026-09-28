@@ -18,7 +18,7 @@ ALL CORE SV TESTS PASSED
 Validated on `yibo-server` with:
 
 ```text
-Synopsys VCS W-2024.09-SP1
+Synopsys VCS
 ```
 
 ## Main Changes

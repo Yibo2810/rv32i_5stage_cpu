@@ -2,9 +2,19 @@
 
 ## Current Verification Status
 
-The project has reached **v0.3.0 verified single-cycle core**.
+The project has two verification states side by side:
 
-The active verification flow is a VCS-based SystemVerilog harness:
+| Phase | Flow | Status |
+|---|---|---|
+| Single-cycle core (v0.3.0 directed → v0.4.0 constrained-random) | `tb/sv/core/` under VCS | Frozen and verified as of v0.4.0; re-run on the v0.5.0 tree after the shared leaf modules were edited: 200 seeds, zero assertion failures, 100% of defined bins |
+| Five-stage pipeline (v0.5.0) | `tb/sv/pipeline/` under VCS | Frozen and verified in simulation: ISS lockstep on the commit stream, 500 seeds, interface and white-box assertions gating the verdict, coverage closed except an enumerated waiver list; not synthesized |
+
+The pipeline state is documented in detail in
+[11_v0_5_0_milestone.md](11_v0_5_0_milestone.md); its design is in
+[03_pipeline_design.md](03_pipeline_design.md) and
+[04_hazard_forwarding.md](04_hazard_forwarding.md).
+
+The frozen single-cycle flow is a VCS-based SystemVerilog harness:
 
 ```text
 programs/asm/*.S
@@ -66,6 +76,7 @@ The intended boundary is:
 | `load_store_width_test` | Verify byte/halfword/word stores and signed/unsigned loads |
 | `branch_matrix_test` | Verify all RV32I branch conditions, taken and not-taken |
 | `jump_u_type_test` | Verify `lui`, `auipc`, `jal`, and `jalr` |
+| `hazard_test` | **stub** — `programs/asm/hazard_test.S` is a TODO comment and `programs/hex/hazard_test.hex` is empty |
 
 The historical smoke tests and the old direct R/I module-path test are no longer
 the primary release gate. The release gate is the core-level VCS regression in
@@ -99,10 +110,13 @@ programs simple.
 
 ## Assertions
 
-The first assertion layer is intentionally lightweight. It should catch
-structural mistakes early without replacing the scoreboard.
+The single-cycle assertion layer (`tb/sv/core/core_assertions.sv`, 15
+concurrent properties) is intentionally lightweight. It catches structural
+mistakes early without replacing the scoreboard.
 
-Planned assertion areas:
+Planned assertion areas (all of these shipped in the v0.4.0 single-cycle
+assertion set; the pipeline needs its own set, listed in the pipeline section
+at the end of this document):
 
 - PC alignment during instruction fetch
 - legal memory byte-enable patterns
@@ -156,34 +170,65 @@ Generator constraints should include:
 Random tests should be added only when they have an oracle and can be
 reproduced from a seed.
 
-## Five-Stage Pipeline Verification Plan
+## Five-Stage Pipeline Verification (v0.5.0)
 
-The current architecture is designed so that much of it survives the transition
-to a pipeline.
+The pipeline phase kept the single-cycle design and changed the view: the
+generator, the ISS and the scoreboard concepts are microarchitecture
+independent, so the port was mostly a move from "what is on the bus" to "what
+retired".
 
-Reusable from single-cycle:
+The key rule is unchanged:
 
-- assembly programs
-- generated hex files
-- generated expected files
-- memory model, with minor interface adaptation if needed
-- scoreboard concepts
-- test database structure
-
-Expected pipeline-specific additions:
-
-- commit/retire monitor
-- IF/ID, ID/EX, EX/MEM, MEM/WB pipeline register checks
-- forwarding tests
-- load-use stall tests
-- branch flush tests
-- valid/kill bit assertions
-- pipeline coverage for hazards and redirects
-
-The key rule is:
-
-**scoreboard checks architectural behavior; monitor adapts to the
+**the scoreboard checks architectural behavior; the monitor adapts to the
 microarchitecture.**
 
-That keeps the v0.3.0 verification work useful instead of becoming a disposable
-single-cycle-only testbench.
+### Environment
+
+| File | Responsibility |
+|---|---|
+| `tb/sv/pipeline/pipeline_tb.sv` | Bring-up smoke program, then the seed loop: build, clear data memory, ISS, run, four checks, per-seed assertion gating, summary |
+| `tb/sv/pipeline/pipeline_probe_if.sv` | Core/memory wires plus MEM-stage identity (`mem_pc`, `mem_instr`) and the retire port, with a clocking block |
+| `tb/sv/pipeline/pipeline_memory.sv` | 256-word imem pre-filled with `ebreak`; `dmem_bram #(.DEPTH(256))`, cleared per seed |
+| `tb/sv/pipeline/pipeline_monitor.sv` | Retired instructions (from `wb_retire`, excluding the trapping one), memory transactions (request paired with response), trap events |
+| `tb/sv/pipeline/pipeline_scoreboard.sv` | Commit stream (per instruction; `rd_addr`/`rd_data` compared only when `rd_we = 1`), transaction stream, retire count/final PC, register file |
+| `tb/sv/pipeline/pipeline_assertions.sv` | 11 interface properties on the memory ports and the MEM-stage instruction |
+| `tb/sv/pipeline/pipeline_sva_bind.sv` | 13 white-box properties bound into `core_5stage`; forwarding / load-use / redirect covergroups |
+| `tb/sv/pipeline/random/` | `pl_instr`, `pl_program` (hazard bias and pipeline templates), `pl_ref_model` (ISS), `pl_coverage` (ISA coverage at retirement) |
+
+### Rules that came out of the port
+
+- **Both sides of a property must belong to the same pipeline stage.** A
+  memory request is judged against the MEM-stage instruction, never against the
+  instruction being fetched.
+- **Compare a field only when it is defined.** `rd_data` is meaningless when
+  `rd_we = 0`; the `rd` field of a store or branch is never encoded; the
+  `rs1`/`rs2` fields of instructions that do not read registers are immediate
+  bits. Each of these produced a false failure or a silently wrong statistic.
+- **Combinational control is checked in the same cycle** (`|->`), and events
+  that a higher-priority hazard can freeze are only checked in the cycle they
+  act.
+- **Put a property's conclusion on a single-cause signal.** `pc_stall` has three
+  causes, so "the stall ended" is checked on the hazard signal itself.
+- **Every assertion has a cover on its antecedent**, and every checker must be
+  able to fail the regression: white-box failures are compared per seed.
+- **Structural coverage holes are fixed in the generator's templates**, not by
+  running more seeds.
+- **Checkers are validated by injecting bugs.** Four mutants of the hazard logic
+  each fail the regression.
+
+### Result and what remains
+
+The release result, coverage numbers, waiver list and mutation table are in
+[11_v0_5_0_milestone.md](11_v0_5_0_milestone.md). Still open after v0.5.0:
+
+```text
+back-pressure stimulus       randomise dmem_req_ready and response latency;
+                             add request-stability assertions
+trap paths                   illegal instruction, ecall, misaligned access,
+                             trap with a younger store in MEM
+waived coverage              sub-word loads into branches/JALR/addresses,
+                             load into branch rs2, deferred JAL/JALR redirects,
+                             control-flow instruction in a redirect shadow
+external reference           riscv-arch-test signatures, Spike or Sail
+directed hazard tests        programs/asm/hazard_test.S is still a stub
+```

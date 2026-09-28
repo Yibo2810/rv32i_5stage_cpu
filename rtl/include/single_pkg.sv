@@ -111,4 +111,20 @@ package single_pkg;
     PC_TARGET_PC_IMM = 2'b00,
     PC_TARGET_ALU    = 2'b01
   } pc_target_sel_e;
+
+  typedef enum logic [3:0] {
+    EXC_INSTR_ADDR_MISALIGNED = 4'd0,
+    EXC_ILLEGAL_INSTR         = 4'd2,
+    EXC_BREAKPOINT            = 4'd3,
+    EXC_LOAD_ADDR_MISALIGNED  = 4'd4,
+    EXC_LOAD_ACCESS_FAULT     = 4'd5,
+    EXC_STORE_ADDR_MISALIGNED = 4'd6,
+    EXC_STORE_ACCESS_FAULT    = 4'd7,
+    EXC_ECALL_MMODE           = 4'd11
+} exc_cause_e;
+
+  typedef struct packed {
+      logic         valid;
+      exc_cause_e   cause;
+  } exception_t;
 endpackage

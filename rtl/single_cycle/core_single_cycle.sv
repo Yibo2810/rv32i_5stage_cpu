@@ -63,6 +63,8 @@ module core_single_cycle(
     logic           jump_and_link;
     logic           side_effect_ok;
     logic           branch_on_zero;
+    logic           ctrl_uses_rs1;
+    logic           ctrl_uses_rs2;
 
     // 2. assign statements
     assign instr          = imem_rdata;
@@ -152,7 +154,9 @@ module core_single_cycle(
         .pc_target_sel(pc_target_sel),
         .alu_src_a_sel(alu_src_a_sel),
         .sys_ecall(sys_ecall),
-        .sys_ebreak(sys_ebreak)
+        .sys_ebreak(sys_ebreak),
+        .ctrl_uses_rs1(ctrl_uses_rs1),
+        .ctrl_uses_rs2(ctrl_uses_rs2)
     );
 
     load_store_unit u_lsu (
