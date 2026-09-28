@@ -269,7 +269,7 @@ import pipeline_pkg::*; (
     cg_redir redir_cov = new();
     final begin
         string names[$] = '{"redirect_valid_assert", "pc_stall_assert", "flush_redirect", "load_use_assert", 
-        "forward_priority_rs1", "forward_priority_rs2", "forward_priority2_rs1", "forward_priority2_rs2"
+        "forward_priority_rs1", "forward_priority_rs2", "forward_priority2_rs1", "forward_priority2_rs2",
         "load_instr_when_stall", "retire_once", "retire_check", "assume_jump_exmem_bubble", "assume_jump_memwb_bubble"};
 
         string count[$] = '{"load_use_hazard", "hazard_acted","load_use_hazard && mem_stall",

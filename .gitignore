@@ -31,3 +31,4 @@ vdCovLog
 .fsm.sch.verilog.xml
 novas.conf
 novas.rc
+scripts/cov_report.py
