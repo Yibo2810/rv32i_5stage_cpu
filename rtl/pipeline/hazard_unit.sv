@@ -1,5 +1,4 @@
 `timescale 1ns/1ps
-`default_nettype none
 
 module hazard_unit
 import single_pkg::*;

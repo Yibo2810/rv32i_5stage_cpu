@@ -1,5 +1,4 @@
 `timescale 1ns/1ps
-`default_nettype none
 
 module pipeline_regs import pipeline_pkg::*;(
     input  logic  clk,

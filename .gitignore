@@ -32,3 +32,6 @@ vdCovLog
 novas.conf
 novas.rc
 scripts/cov_report.py
+
+# FPGA
+rtl/fpga/build/

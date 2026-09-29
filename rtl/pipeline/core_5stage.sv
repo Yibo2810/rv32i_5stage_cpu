@@ -1,5 +1,4 @@
 `timescale 1ns/1ps
-`default_nettype none
 
 module core_5stage 
 import single_pkg::*;

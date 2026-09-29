@@ -1,5 +1,4 @@
 `timescale 1ns/1ps
-`default_nettype none
 module dmem_bram #(parameter int DEPTH = 1024) (    // words
   input  logic        clk, rst,
   input  logic        req_valid,
