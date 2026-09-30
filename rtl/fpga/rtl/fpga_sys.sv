@@ -5,7 +5,7 @@ import single_pkg::*;
 #(
     parameter int IMEM_WORDS = 256,
     parameter int DMEM_WORDS = 256,
-    parameter string IMEM_INIT = "rtl/fpga/build/hazard_test.mem",
+    parameter string IMEM_INIT = "hazard_test.mem",
     parameter logic [31:0] TOHOST_ADDR = 32'h0000_03FC
 ) (
     input logic clk,

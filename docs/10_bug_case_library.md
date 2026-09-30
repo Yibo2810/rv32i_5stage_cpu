@@ -22,6 +22,10 @@
 | 18 | 2026-09-20 | Redirect-during-memory-stall and load-into-branch never occurred | Coverage hole (template shape) | Cover counts of zero at 200 and 500 seeds |
 | 19 | 2026-09-27 | White-box assertions did not gate the verdict; counter keys crossed | Checker (verdict) | Injected bug reported under the wrong name |
 | 20 | 2026-09-27 | Backward `JAL` counted as forwarding in coverage | Coverage (dead field) | Unexpected bin in a per-bin tally |
+| 21 | 2026-09-29 | `create_clock` on a port name that did not exist: no clocks, timing "met" unchecked | Constraints (XDC) | `report_clocks` empty; `[Vivado 12-4739]` critical warning under a "0 critical warnings" synthesis summary |
+| 22 | 2026-09-29 | Repository-relative `$readmemh` path unreadable in a Vivado project; the ROM would be all zero | Build flow | `[Synth 8-4445]` in a scratch project-mode test, with the `.mem` already added to the project |
+| 23 | 2026-09-29 | On-chip verdict without `tohost == 1`: a failing self-check would light PASS | Checker (verdict, in RTL) | Review; the code was lint-clean |
+| 24 | 2026-09-29 | Deleted branch labels assembled without an error | Tooling (`asm_to_hex.sh` never links) | Review; GNU `as` exits 0 and leaves unresolved relocations |
 
 ---
 
@@ -66,3 +70,11 @@
 12. **Test the checkers.** Injecting four hazard-logic bugs showed which
     properties could see which bug — a property that restates the mechanism
     missed one that a property stating the goal caught.
+13. **A clean summary line is not evidence.** In the FPGA flow, setup mistakes
+    that destroy the result came back as warnings (Cases 21, 22) or not at all
+    (Case 24) while the headline stayed green. Check the artifact the mistake
+    would destroy — `report_clocks`, the ROM-load message and LUT count, the
+    object file's relocations — and grep the full log for `CRITICAL`.
+14. **An on-chip verdict is a checker too** (Case 23). It needs the same
+    independent expectation as a testbench verdict, and a negative run that
+    shows it can say FAIL.

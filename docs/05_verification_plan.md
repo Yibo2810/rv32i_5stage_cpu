@@ -2,12 +2,13 @@
 
 ## Current Verification Status
 
-The project has two verification states side by side:
+The project has three verification states side by side:
 
 | Phase | Flow | Status |
 |---|---|---|
 | Single-cycle core (v0.3.0 directed → v0.4.0 constrained-random) | `tb/sv/core/` under VCS | Frozen and verified as of v0.4.0; re-run on the v0.5.0 tree after the shared leaf modules were edited: 200 seeds, zero assertion failures, 100% of defined bins |
-| Five-stage pipeline (v0.5.0) | `tb/sv/pipeline/` under VCS | Frozen and verified in simulation: ISS lockstep on the commit stream, 500 seeds, interface and white-box assertions gating the verdict, coverage closed except an enumerated waiver list; not synthesized |
+| Five-stage pipeline (v0.5.0) | `tb/sv/pipeline/` under VCS | Frozen and verified in simulation: ISS lockstep on the commit stream, 500 seeds, interface and white-box assertions gating the verdict, coverage closed except an enumerated waiver list; re-run on the v0.6.0 tree with offset 1 (2026-09-30): identical totals |
+| FPGA system wrapper (v0.6.0) | `rtl/fpga/tb/fpga_sys_tb.sv` under VCS, then the Arty A7-100T | Self-checking `hazard_test` passes in simulation and on the board (board smoke test); passing case only, fail path not yet exercised |
 
 The pipeline state is documented in detail in
 [11_v0_5_0_milestone.md](11_v0_5_0_milestone.md); its design is in
@@ -76,7 +77,7 @@ The intended boundary is:
 | `load_store_width_test` | Verify byte/halfword/word stores and signed/unsigned loads |
 | `branch_matrix_test` | Verify all RV32I branch conditions, taken and not-taken |
 | `jump_u_type_test` | Verify `lui`, `auipc`, `jal`, and `jalr` |
-| `hazard_test` | **stub** — `programs/asm/hazard_test.S` is a TODO comment and `programs/hex/hazard_test.hex` is empty |
+| `hazard_test` | Pipeline hazards (load-use, EX/MEM and MEM/WB forwarding, redirects with squashed loads/stores/branches, a redirect deferred by a memory stall), followed by a self-checking tail that compares the 15 signature words and writes a verdict to `tohost` (`0x3FC`); also the v0.6.0 board program |
 
 The historical smoke tests and the old direct R/I module-path test are no longer
 the primary release gate. The release gate is the core-level VCS regression in
@@ -230,5 +231,9 @@ waived coverage              sub-word loads into branches/JALR/addresses,
                              load into branch rs2, deferred JAL/JALR redirects,
                              control-flow instruction in a redirect shadow
 external reference           riscv-arch-test signatures, Spike or Sail
-directed hazard tests        programs/asm/hazard_test.S is still a stub
 ```
+
+`programs/asm/hazard_test.S`, a stub at v0.5.0, was written for v0.6.0 (see the
+directed-test table above and [12_v0_6_0_milestone.md](12_v0_6_0_milestone.md)).
+It runs in `fpga_sys_tb` and on the board; the `pipeline_tb` `+HEX=` smoke run
+only dumps it and does not compare it against its expected file.

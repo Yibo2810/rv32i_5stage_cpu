@@ -340,6 +340,14 @@ the regression summary, the white-box assertion table with per-property
 failure counts, the event counts behind each assertion, and the coverage lines
 quoted above.
 
+Correction (2026-09-30): through `make pl-run`, the `+SEED_OFFSET=1` in `ARGS`
+has no effect. The Makefile passes a time-based `+SEED_OFFSET` first, and
+`$value$plusargs` returns the first match, so the "release run" line above runs
+time-seeded programs. The release numbers in the summary reproduce exactly
+with `make pl-build` followed by
+`./sim/build/pipeline_vcs/simv +SEED_OFFSET=1 +NUM_SEEDS=500`
+(checked on the v0.6.0 tree: `total_txns=5688`, `total_retired=29676`).
+
 ---
 
 ## 9. Next versions

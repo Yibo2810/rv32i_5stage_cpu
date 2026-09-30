@@ -3,8 +3,14 @@
 A learning-oriented RV32I CPU project implemented in Verilog and
 SystemVerilog.
 
-The project has completed its **v0.5.0 milestone: a five-stage pipeline
-verified in simulation**. The pipelined core (IF/ID/EX/MEM/WB, forwarding,
+The project has completed its **v0.6.0 milestone: the pipeline running on an
+FPGA board**. On a Digilent Arty A7-100T at 25 MHz, a directed hazard program
+with a self-checking tail runs on the core and reports PASS on the board LEDs
+(board smoke test, passing case only). See
+[docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md).
+
+The core is the **v0.5.0 five-stage pipeline, verified in simulation**, and
+is functionally unchanged on the board. The pipelined core (IF/ID/EX/MEM/WB, forwarding,
 load-use stalls, redirect flushes, a global freeze on memory stalls, a
 WB-committed exception token, and a request/response data-memory interface) is
 checked by a seed-reproducible constrained-random regression: every retired
@@ -20,6 +26,18 @@ baseline, and its regression still passes on the current tree.
 
 ## Current Milestone
 
+**v0.6.0: FPGA bring-up on an Arty A7-100T — board smoke test passed**
+(see [docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md))
+
+The frozen pipeline sits in a portable system wrapper (`fpga_sys`: an
+instruction ROM in LUTs, the block-RAM data memory, a trap latch and a `tohost`
+store observer) and a board wrapper (`arty_a7_top`: MMCM 100 → 25 MHz, reset
+synchronizer, LED views). `hazard_test` compares its own 15 signature words and
+writes a verdict to `tohost` (`0x3FC`); the wrapper turns it into PASS/FAIL.
+The program passes on `fpga_sys` in VCS and on the board. Vivado reports
+WNS +21.9 ns at 25 MHz, 1750 LUTs, 1641 flip-flops and one RAMB18. The fail
+path has not been exercised yet, in simulation or on the board.
+
 **v0.5.0 (frozen): five-stage pipeline, verified in simulation**
 (see [docs/11_v0_5_0_milestone.md](docs/11_v0_5_0_milestone.md))
 
@@ -31,8 +49,9 @@ adds pipeline pressure on top of the v0.4.0 templates: a bias that makes
 instructions read the destinations of the previous one to three instructions,
 branch and `JALR` operands that come from loads, stores placed right before a
 redirect, and memory accesses whose base register is forwarded or itself
-loaded. The design is not yet synthesized; instruction fetch is combinational,
-so on an FPGA the instruction memory must be LUTRAM.
+loaded. Instruction fetch is combinational, so on an FPGA the instruction
+memory is an asynchronous-read memory in LUTs, not block RAM (synthesized in
+v0.6.0).
 
 **v0.4.0 (frozen): constrained-random verification of the single-cycle core**
 (see [docs/09_v0_4_0_milestone.md](docs/09_v0_4_0_milestone.md))
@@ -92,16 +111,40 @@ fully green regressions — are documented in
 - [x] Pipeline interface assertions (11) and white-box assertions bound into the core (13), gating the verdict per seed
 - [x] Pipeline functional coverage: ISA covergroups at retirement plus forwarding / load-use / redirect covergroups
 - [x] Mutation check: four injected pipeline bugs each fail the regression
-- [ ] Pipeline directed hazard tests (`hazard_test.S` is still a stub) and request back-pressure stimulus
-- [ ] Vivado synthesis and FPGA bring-up
+- [x] Directed pipeline hazard test (`hazard_test.S`: load-use, forwarding and redirect cases) with a self-checking tail
+- [x] Vivado synthesis and implementation for an Arty A7-100T (25 MHz, timing met)
+- [x] Board smoke test: the self-checking `hazard_test` reports PASS on the board LEDs
+- [ ] Fail-path (negative) test in simulation and on the board
+- [ ] On-board debug visibility (ILA or UART)
+- [ ] Request back-pressure stimulus
 
 ## Verification Summary
 
-Pipeline regression (v0.5.0):
+FPGA bring-up (v0.6.0): `fpga_sys` in VCS, then the Arty A7-100T:
+
+```text
+SUMMARY cycles=206 timeout=0 halted=1 cause=EXC_BREAKPOINT trap_pc=00000240
+SUMMARY tohost_seen=1 tohost=00000001 pass=1 fail=0 error_trap=0 mark_seen=1
+FPGA_SYS PASS
+Vivado (xc7a100tcsg324-1, 25 MHz): WNS +21.925 ns, WHS +0.162 ns, 1750 LUT, 1641 FF, 1 RAMB18
+Board: PASS LED on, all four LED views as expected
+```
+
+Only the passing case has been run; the fail path is still open. Details and
+the LED map: [docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md).
+
+Pipeline regression (v0.5.0), 500 seeds with a fixed seed offset:
 
 ```sh
-make pl-run ARGS="+NUM_SEEDS=500 +SEED_OFFSET=1"
+make pl-build
+./sim/build/pipeline_vcs/simv +SEED_OFFSET=1 +NUM_SEEDS=500 -l sim/build/pipeline_vcs/run.log
 ```
+
+`make pl-run` places a time-based `+SEED_OFFSET` in front of `$(ARGS)` and the
+testbench takes the first match, so a fixed offset has to be passed to `simv`
+directly. Re-run with offset 1 on the v0.6.0 tree (2026-09-30), the result is
+identical to the v0.5.0 release below (`total_txns=5688`,
+`total_retired=29676`, same coverage).
 
 Validated v0.5.0 result:
 
@@ -200,6 +243,9 @@ Important files:
 | `rtl/include/single_pkg.sv` | Shared SystemVerilog RV32I constants and control types |
 | `rtl/single_cycle/` | Current verified single-cycle CPU RTL |
 | `rtl/pipeline/` | Five-stage pipeline RTL: `{if,id,ex,mem,wb}_stage.sv`, `pipeline_regs.sv`, `hazard_unit.sv`, `forwarding_unit.sv`, `core_5stage.sv`, `memory/dmem_bram.sv` (see [docs/03_pipeline_design.md](docs/03_pipeline_design.md)) |
+| `rtl/fpga/rtl/` | Portable FPGA system: `imem_rom.sv` (instruction ROM, combinational read) and `fpga_sys.sv` (core + memories + trap latch + `tohost` observer + pass/fail) |
+| `rtl/fpga/arty_a7/` | Arty A7-100T board wrapper (`arty_a7_top.sv`: MMCM, reset synchronizer, LED views) and pin constraints (`arty_a7.xdc`) |
+| `rtl/fpga/tb/fpga_sys_tb.sv` | VCS testbench for `fpga_sys`: backdoor program load (`+MEM=`), run to halt, verdict checks (`+EXPECT_TOHOST=`) |
 | `tb/sv/core/core_sv_tb.sv` | VCS top-level SystemVerilog harness |
 | `tb/sv/core/core_verif_pkg.sv` | Shared verification structs and enums |
 | `tb/sv/core/core_test_db.sv` | Test metadata database: name, hex path, expected path, max cycles |
@@ -268,10 +314,11 @@ Run the five-stage pipeline regression:
 
 ```sh
 make pl-run                                          # 30 seeds, time-based seed offset
-make pl-run ARGS="+NUM_SEEDS=500 +SEED_OFFSET=1"     # release run
+make pl-run ARGS="+NUM_SEEDS=500"                    # 500 seeds, time-based seed offset
 make pl-run ARGS="+SINGLE_SEED=<n>"                  # reproduce one failing seed
 make pl-lint                                         # Verilator -Wall lint of the pipeline RTL
 make pl-build                                        # compile only
+./sim/build/pipeline_vcs/simv +SEED_OFFSET=1 +NUM_SEEDS=500 -l sim/build/pipeline_vcs/run.log   # fixed offset, after pl-build
 ```
 
 Output is written under `sim/build/pipeline_vcs/` (`compile.log`, `run.log`).
@@ -279,6 +326,27 @@ Each run first executes one directed smoke program (`+HEX=...`, default
 `load_store_width_test`), then the random seeds. The end of `run.log` holds the
 regression summary, the white-box assertion table, the event counts behind each
 assertion, and the coverage lines.
+
+Build the FPGA program image and simulate the FPGA system wrapper (v0.6.0),
+from the repository root:
+
+```sh
+./scripts/asm_to_hex.sh hazard_test && ./tools/rv32i_ref.py hazard_test
+mkdir -p rtl/fpga/build
+awk -v N=256 'NF {print; n++} END {if (n > N) {print "too big: " n > "/dev/stderr"; exit 1} for (; n < N; n++) print "00100073"}' \
+    programs/hex/hazard_test.hex > rtl/fpga/build/hazard_test.mem
+mkdir -p sim/build/fpga_sys_vcs/csrc
+vcs -full64 -sverilog -debug_access+all -top fpga_sys_tb \
+    -f tb/filelists/pipeline_rtl.f \
+    rtl/fpga/rtl/imem_rom.sv rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/fpga_sys_tb.sv \
+    -Mdir=sim/build/fpga_sys_vcs/csrc -o sim/build/fpga_sys_vcs/simv \
+    -l sim/build/fpga_sys_vcs/compile.log
+./sim/build/fpga_sys_vcs/simv +MEM=rtl/fpga/build/hazard_test.mem -l sim/build/fpga_sys_vcs/run.log
+```
+
+The run ends with `FPGA_SYS PASS`. The Vivado steps (project mode,
+`xc7a100tcsg324-1`) and the LED map are in
+[docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md).
 
 ## Repository Layout
 
@@ -292,6 +360,10 @@ assertion, and the coverage lines.
 │   ├── expected/
 │   └── hex/
 ├── rtl/
+│   ├── fpga/
+│   │   ├── arty_a7/
+│   │   ├── rtl/
+│   │   └── tb/
 │   ├── include/
 │   ├── pipeline/
 │   │   └── memory/
@@ -328,9 +400,12 @@ Documented in detail in
 - The ISS in `rv_ref_model.sv` implements exactly the supported subset and
   fatals on anything else — it is an oracle for this project, not a full
   architectural simulator.
-- The pipeline is verified in simulation only. It has not been synthesized;
-  instruction fetch is a same-cycle combinational read, so on an FPGA the
-  instruction memory must be LUTRAM, not BRAM.
+- On hardware, only one directed self-checking program has run (v0.6.0), and
+  only its passing case; the random regression runs in simulation only.
+  Instruction fetch is a same-cycle combinational read, so the instruction
+  memory is a ROM in LUTs, not block RAM. FPGA-specific limitations (no
+  negative test yet, no on-board debug visibility, GUI-only Vivado build) are
+  listed in [docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md).
 - The pipeline's data memory is single-outstanding with a 2-cycle cost per
   load/store against a 1-cycle BRAM; the testbench memory never applies
   back-pressure.
@@ -348,9 +423,11 @@ Documented in detail in
    request/response data-memory interface.~~ **Done (v0.5.0).**
 3. ~~Port the constrained-random regression to the pipeline's commit stream,
    with assertions and coverage.~~ **Done (v0.5.0), verified in simulation.**
-4. **v0.6.0 — FPGA bring-up:** synthesis, LUTRAM instruction memory, block-RAM
-   data memory, top-level wrapper with clock and reset synchronization,
-   pass/fail on an LED or UART TX.
+4. ~~v0.6.0 — FPGA bring-up: synthesis, LUT-based instruction memory,
+   block-RAM data memory, top-level wrapper with clock and reset
+   synchronization, pass/fail on LEDs.~~ **Done (v0.6.0): board smoke test
+   passed on an Arty A7-100T.** Still open: the fail-path test, on-board debug
+   visibility (ILA or UART), a scripted Vivado build.
 5. **v0.7.0 — request/response instruction fetch**, so the instruction memory
    can live in block RAM, plus a data memory model with back-pressure.
 6. Peripherals on a bus (UART, timer), interrupts with CSRs and trap handling,

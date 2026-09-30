@@ -1,7 +1,8 @@
 # Hazard Control and Forwarding
 
-Status: **frozen in v0.5.0 — verified in simulation, not synthesized.**
-Last updated: 2026-09-28.
+Status: **frozen in v0.5.0 — verified in simulation; synthesized and run on an
+Arty A7-100T in v0.6.0 ([12_v0_6_0_milestone.md](12_v0_6_0_milestone.md)).**
+Last updated: 2026-09-30.
 
 This document describes how the five-stage pipeline keeps instruction ordering:
 the two forwarding paths, the load-use stall, the redirect flush, the memory

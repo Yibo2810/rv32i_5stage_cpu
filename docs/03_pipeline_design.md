@@ -1,7 +1,8 @@
 # Pipeline Design (Five-Stage)
 
-Status: **frozen in v0.5.0 — verified in simulation, not synthesized.**
-Last updated: 2026-09-28 (branch `feature/pipeline-5stage`).
+Status: **frozen in v0.5.0 — verified in simulation; synthesized and run on an
+Arty A7-100T in v0.6.0 ([12_v0_6_0_milestone.md](12_v0_6_0_milestone.md)).**
+Last updated: 2026-09-30.
 
 This document describes the five-stage pipeline that replaces the verified
 single-cycle datapath: the stage partition, the pipeline register payloads, the
@@ -331,10 +332,13 @@ correctness first, throughput later.
 |---|---|
 | Data memory | `rtl/pipeline/memory/dmem_bram.sv`, parameterised `DEPTH` (words), `req_ready = 1'b1`, byte-write via `req_wstrb`, registered read data, `rsp_valid <= fire` (exactly one response per request). Simulation and the board use the **same file**, so behaviour cannot drift |
 | BRAM initialisation | Storage array is `always @(posedge clk)` with an `initial` zero-fill loop. `always_ff` plus `initial` on the same array triggers a VCS `Error-[ICPD]` multi-driver error |
-| Instruction memory | IF reads the instruction combinationally (`imem_rdata` in the same cycle as `imem_addr`), so on FPGA it must be **LUTRAM / distributed RAM**, not BRAM. Putting imem on BRAM requires changing the IF fetch timing and is a separate milestone |
+| Instruction memory | IF reads the instruction combinationally (`imem_rdata` in the same cycle as `imem_addr`), so on FPGA it must be an **asynchronous-read memory in LUTs** (distributed ROM/RAM), not BRAM. Putting imem on BRAM requires changing the IF fetch timing and is a separate milestone |
 | `halted` | Sticky, intended for an LED (the trap pulse is one cycle wide and invisible to the eye) |
 
-The BRAM inference and LUTRAM usage have **not** been checked in Vivado yet.
+Checked in Vivado in v0.6.0 (`xc7a100tcsg324-1`): `dmem_bram` with 256 words
+infers one RAMB18E1, and the 256-word instruction ROM (`rtl/fpga/rtl/imem_rom.sv`)
+is folded into logic LUTs (`LUT as Memory` = 0). See
+[12_v0_6_0_milestone.md](12_v0_6_0_milestone.md).
 
 ---
 
@@ -344,7 +348,7 @@ The BRAM inference and LUTRAM usage have **not** been checked in Vivado yet.
 |---|---|---|---|
 | Clock/reset | `clk`, `rst` | in | Synchronous, active-high reset |
 | Fetch | `imem_addr[31:0]` | out | `= pc`, byte address |
-| | `imem_rdata[31:0]` | in | Same-cycle combinational read (LUTRAM on FPGA) |
+| | `imem_rdata[31:0]` | in | Same-cycle combinational read (ROM in LUTs on FPGA) |
 | Request | `dmem_req_valid` | out | Does not depend on `req_ready` |
 | | `dmem_req_ready` | in | `valid && ready` = handshake |
 | | `dmem_req_write` | out | 0 = load, 1 = store (gated with `mem_go`) |
@@ -415,5 +419,6 @@ make pl-run ARGS="+NUM_SEEDS=500 +SEED_OFFSET=1"
 The regression compares every retired instruction against the ISS; see
 [11_v0_5_0_milestone.md](11_v0_5_0_milestone.md) for the assertions, the
 coverage results and waivers, the mutation check, and the known limitations
-(not synthesized; combinational instruction fetch; no memory back-pressure;
-only the terminating `ebreak` trap exercised).
+(combinational instruction fetch; no memory back-pressure; only the terminating
+`ebreak` trap exercised). Synthesis and board results are in
+[12_v0_6_0_milestone.md](12_v0_6_0_milestone.md).

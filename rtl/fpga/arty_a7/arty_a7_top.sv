@@ -26,7 +26,7 @@ module arty_a7_top (
     logic tohost_seen;
     logic [31:0] tohost;
     logic [31:0] trap_pc_q;
-    logic trap_cause_q;
+    logic [3:0] trap_cause_q;
     logic halted;
     logic pass;
     logic fail;
@@ -68,7 +68,7 @@ module arty_a7_top (
             2'b01: led = tohost[4:1];
             2'b10: led = trap_cause_q[3:0];
             2'b11: led = {
-                locked,
+                mmcm_locked,
                 rst,
                 tohost_seen,
                 heartbeat
