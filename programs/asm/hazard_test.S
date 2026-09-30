@@ -131,7 +131,94 @@ d4:
   beq  x0, x0, e1
   lw   x31, 0(x0)
 e1:
+
   lw   x30, 20(x0)
   beq  x30, x30, e2
   sw   x31, 68(x0)
 e2:
+
+  # --- TOHOST ---
+  li x3, 1
+  lw x5, 0x00(x0)
+  li x6, 0x12345678
+  bne x5, x6, fail
+
+  li x3, 2
+  lw x5, 0x04(x0)
+  li x6, 0x12345678
+  bne x5, x6, fail
+
+  li x3, 3
+  lw x5, 0x08(x0)
+  li x6, 0x12345679
+  bne x5, x6, fail
+
+  li x3, 4
+  lw x5, 0x10(x0)
+  li x6, 0x12345678
+  bne x5, x6, fail
+
+  li x3, 5
+  lw x5, 0x14(x0)
+  li x6, 0x89abcdef
+  bne x5, x6, fail
+
+  li x3, 6
+  lw x5, 0x18(x0)
+  li x6, 0x12345678
+  bne x5, x6, fail
+
+  li x3, 7
+  lw x5, 0x1C(x0)
+  li x6, 0x2468acf0
+  bne x5, x6, fail
+
+  li x3, 8
+  lw x5, 0x20(x0)
+  li x6, 0x2468acf0
+  bne x5, x6, fail
+
+  li x3, 9
+  lw x5, 0x24(x0)
+  li x6, 0x2468acf0
+  bne x5, x6, fail
+
+  li x3, 10
+  lw x5, 0x28(x0)
+  li x6, 0x2468acf0
+  bne x5, x6, fail
+
+  li x3, 11
+  lw x5, 0x2C(x0)
+  li x6, 0x12345678
+  bne x5, x6, fail
+
+  li x3, 12
+  lw x5, 0x30(x0)
+  li x6, 0xffffffef
+  bne x5, x6, fail
+
+  li x3, 13
+  lw x5, 0x34(x0)
+  li x6, 0x000000ef
+  bne x5, x6, fail
+
+  li x3, 14
+  lw x5, 0x38(x0)
+  li x6, 0xffffcdef
+  bne x5, x6, fail
+
+  li x3, 15
+  lw x5, 0x3C(x0)
+  li x6, 0x0000cdef
+  bne x5, x6, fail
+
+  li x30, 1
+  sw x30, 0x3FC(x0)
+  j  end
+
+  fail:
+    slli x30, x3, 1
+    ori  x30, x30, 1
+    sw   x30, 0x3FC(x0)
+  end:

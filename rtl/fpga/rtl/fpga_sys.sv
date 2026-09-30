@@ -18,7 +18,9 @@ import single_pkg::*;
     output logic tohost_seen,
     output logic [31:0] tohost,
     output logic pass,
-    output logic fail
+    output logic fail,
+    output logic mark_seen,
+    output logic error_trap
 );
     logic [31:0] imem_rdata;
     logic [31:0] imem_addr;
@@ -37,16 +39,41 @@ import single_pkg::*;
     logic        trap_valid;
     exc_cause_e  trap_cause;
     logic [31:0] trap_pc;
+    assign error_trap = halted && trap_cause_q != EXC_BREAKPOINT;
+    always_ff @( posedge clk ) begin
+        if (rst) begin
+            trap_cause_q <= exc_cause_e'(0); //only valid when halted
+            trap_pc_q <= 32'h0;
+        end else if (trap_valid) begin
+            trap_cause_q <= exc_cause_e'(trap_cause);
+            trap_pc_q <= trap_pc;
+        end
+    end
+    // see the store process on led
+    always_ff @( posedge clk ) begin
+        if (rst) begin
+            mark_seen <= 1'b0;
+        end else begin
+            if (dmem_req_valid && dmem_req_ready && dmem_req_write) begin
+                mark_seen <= 1'b1;
+            end
+        end
+    end
 
     always_ff @( posedge clk ) begin
         if (rst) begin
-        trap_cause_q <= 4'b0;
-        trap_pc <= 32'h0;
-        end else if (trap_valid) begin
-        trap_cause_q <= exc_cause_e'(trap_cause);
-        trap_pc_q <= trap_pc;
+            tohost_seen <= 1'b0;
+            tohost <= 32'b0;
+        end else begin
+            if (dmem_req_valid && dmem_req_ready && dmem_req_write && dmem_req_addr == TOHOST_ADDR && dmem_req_wstrb == 4'b1111 && !tohost_seen) begin
+                tohost <= dmem_req_wdata;
+                tohost_seen <= 1'b1;
+            end
         end
     end
+
+    assign pass = halted && trap_cause_q == EXC_BREAKPOINT && tohost_seen && tohost == 32'd1;
+    assign fail = halted && !pass;
 
     core_5stage u_core (
         .clk           (clk),
@@ -82,9 +109,7 @@ import single_pkg::*;
         .rsp_rdata(dmem_rsp_rdata)
     );
 
-    imem_rom u_imem #(
-        .DEPTH(IMEM_WORDS), .INIT_FILE(IMEM_INIT)
-    ) (
+    imem_rom #(.DEPTH(IMEM_WORDS), .INIT_FILE(IMEM_INIT)) u_imem (
         .addr(imem_addr),
         .rdata(imem_rdata)
     );
