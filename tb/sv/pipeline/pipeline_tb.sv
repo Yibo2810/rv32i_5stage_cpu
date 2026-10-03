@@ -10,6 +10,7 @@ module pipeline_tb;
     pl_ref_model ref_model;
 
     localparam int unsigned MAX_CYCLES = 4000;
+    localparam int unsigned NO_RETIRE_LIMIT = 200;
     int unsigned pass_cnt = 0;
     int unsigned fail_cnt = 0;
     int unsigned num_seeds = 30;
@@ -44,20 +45,50 @@ module pipeline_tb;
         rst = 1'b0;
     endtask
 
+    task automatic dump_hang_state(input string why, input int unsigned cycles, input int unsigned idle);
+        $display("==== %s at cycle %0d (no retire for %0d cycles, %0d commits) ====",
+                 why, cycles, idle, u_monitor.observed_commits.size());
+        if (u_monitor.observed_commits.size() != 0)
+            $display("  last commit : pc=%08h instr=%08h",
+                     u_monitor.observed_commits[$].pc, u_monitor.observed_commits[$].instr);
+        $display("  IF          : pc_current=%08h pending=%0b pending_pc=%08h killed=%0b buf_valid=%0b buf_pc=%08h",
+                 u_core.u_if_stage.pc_current, u_core.u_if_stage.fetch_q.pending,
+                 u_core.u_if_stage.fetch_q.pending_pc, u_core.u_if_stage.fetch_q.killed,
+                 u_core.u_if_stage.fetch_q.buf_valid, u_core.u_if_stage.fetch_q.buf_pc);
+        $display("  imem req    : valid=%0b ready=%0b addr=%08h | rsp: valid=%0b ready=%0b",
+                 pif.imem_req_valid, pif.imem_req_ready, pif.imem_req_addr,
+                 pif.imem_rsp_valid, pif.imem_rsp_ready);
+        $display("  imem slave  : busy_q=%0b delay_q=%0d",
+                 u_memory.u_imem.busy_q, u_memory.u_imem.delay_q);
+        $display("  pipe valid  : ifid=%0b idex=%0b exmem=%0b memwb=%0b | mem_stall=%0b halted=%0b",
+                 u_core.ifid_q.valid, u_core.idex_q.valid, u_core.exmem_q.valid, u_core.memwb_q.valid,
+                 u_core.mem_stall, pif.halted);
+        $display("  dmem        : req valid=%0b ready=%0b | rsp valid=%0b ready=%0b",
+                 pif.dmem_req_valid, pif.dmem_req_ready, pif.dmem_rsp_valid, pif.dmem_rsp_ready);
+    endtask
+    
     task automatic run_until_halt(
         input int unsigned max_cycles,
         output int unsigned cycles,
         output bit timeout
     );
+        int unsigned idle = 0;
         cycles = 0;
         timeout = 1'b0;
         while (pif.halted !== 1'b1) begin
+            if (idle == NO_RETIRE_LIMIT) begin
+                timeout = 1'b1;
+                dump_hang_state("DEADLOCK", cycles, idle);
+                return;
+            end
             if (cycles == max_cycles) begin
                 timeout = 1'b1;
+                dump_hang_state("TIMEOUT (still retiring, no halt)", cycles, idle);
                 return;
             end
             @(negedge clk);
             cycles++;
+            idle = pif.retire ? 0 : idle + 1;
         end
     endtask
     
@@ -82,30 +113,6 @@ module pipeline_tb;
         end
     endtask
 
-    task automatic dump_result(input string hex, input int unsigned cycles, input bit timeout);
-        $display("---- %s", hex);
-        foreach (u_monitor.observed_commits[i]) begin
-            commit_t c = u_monitor.observed_commits[i];
-            if (c.rd_we)
-                $display("COMMIT pc=%08h instr=%08h next=%08h x%0d=%08h", c.pc, c.instr, c.next_pc, c.rd_addr, c.rd_data);
-            else
-                $display("COMMIT pc=%08h instr=%08h next=%08h", c.pc, c.instr, c.next_pc);
-        end
-        foreach (u_monitor.observed_txns[i]) begin
-            core_mem_txn_t t = u_monitor.observed_txns[i];
-            if (t.is_write)
-                $display("TXN W %08h %08h %04b", t.addr, t.wdata & lane_mask(t.wstrb), t.wstrb);
-            else
-                $display("TXN R %08h %08h %04b", t.addr, t.rdata, 4'b0000);
-        end
-        for (int r = 1; r < 32; r++)
-            if (u_core.u_id_stage.u_regfile.regs[r] != 32'b0)
-                $display("REG x%0d = %08h", r, u_core.u_id_stage.u_regfile.regs[r]);
-        $display("SUMMARY cycles=%0d timeout=%0d traps=%0d trap_cause=%s trap_pc=%08h commits=%0d txns=%0d",
-                 cycles, timeout, u_monitor.trap_count, u_monitor.trap_cause_q.name(), u_monitor.trap_pc_q,
-                 u_monitor.observed_commits.size(), u_monitor.observed_txns.size());
-    endtask
-
     task automatic run_random_test(input int seed);
         pl_program p = new();
         string nm = $sformatf("random_seed_%0d", seed);
@@ -115,14 +122,15 @@ module pipeline_tb;
         p.build(seed);
         u_memory.clear_dmem();
         u_memory.init_mem();
-        p.load_imem(u_memory.imem);
+        p.load_imem(u_memory.u_imem.mem);
 
         ref_model = new();
         for (int i = 0; i < 256; i++)
             ref_model.dmem[i] = u_memory.peek_dmem(i*4);
-        ref_model.run_iss(u_memory.imem, RUN_BUDGET);
+        ref_model.run_iss(u_memory.u_imem.mem, RUN_BUDGET);
 
         u_monitor.clear();
+        u_memory.reseed(seed);
         apply_reset();
         run_until_halt(MAX_CYCLES, cycles, timeout);
 
@@ -142,21 +150,10 @@ module pipeline_tb;
 
     initial begin
 
-        if (!$value$plusargs("HEX=%s", hex))
-            hex = "programs/hex/load_store_width_test.hex";
-
-        u_memory.load_hex(hex);
         u_monitor.clear();
         apply_reset();
         run_until_halt(MAX_CYCLES, cycles, timeout);
         repeat (2) @(negedge clk);       // when ebreak, run 2 cycles to see the state after break
-        dump_result(hex, cycles, timeout);
-
-        if (!timeout && u_monitor.trap_count == 1 && u_monitor.trap_cause_q == EXC_BREAKPOINT)
-            $display("BRINGUP DONE: halted on ebreak (not yet checked against a reference)");
-        else
-            $display("BRINGUP FAIL: timeout=%0d traps=%0d cause=%s",
-                     timeout, u_monitor.trap_count, u_monitor.trap_cause_q.name());
 
         // random test
         void'($value$plusargs("SEED_OFFSET=%0d", seed_offset));
@@ -213,8 +210,12 @@ module pipeline_tb;
     core_5stage u_core (
         .clk           (clk),
         .rst           (rst),
-        .imem_addr     (pif.imem_addr),
-        .imem_rdata    (pif.imem_rdata),
+        .imem_req_valid(pif.imem_req_valid),
+        .imem_req_ready(pif.imem_req_ready),
+        .imem_req_addr (pif.imem_req_addr),
+        .imem_rsp_valid(pif.imem_rsp_valid),
+        .imem_rsp_ready(pif.imem_rsp_ready),
+        .imem_rsp_rdata(pif.imem_rsp_rdata),
         .dmem_req_valid(pif.dmem_req_valid),
         .dmem_req_ready(pif.dmem_req_ready),
         .dmem_req_write(pif.dmem_req_write),

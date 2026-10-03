@@ -3,25 +3,19 @@
 module pipeline_memory (
     pipeline_probe_if.bram p
 );
-    localparam int          IMEM_WORDS = 256;
     localparam logic [31:0] EBREAK     = 32'h0010_0073;
-
-    logic [31:0] imem [0:IMEM_WORDS-1];
-
-    assign p.imem_rdata = imem[p.imem_addr[9:2]];
-
-    task automatic load_hex(input string path);
-        foreach (imem[i]) imem[i] = EBREAK;
-        $readmemh(path, imem);
-    endtask
 
     task automatic clear_dmem();
         foreach (u_dmem.mem[i]) u_dmem.mem[i] = 32'b0;
     endtask
     
     task automatic init_mem();
-        foreach (imem[i]) imem[i] = 32'h0010_0073;
+        foreach (u_imem.mem[i]) u_imem.mem[i] = 32'h0010_0073;
     endtask
+
+    function automatic void reseed(input int s);
+        u_imem.reseed(s);
+    endfunction
 
     function automatic logic [31:0] peek_dmem(input logic [31:0] addr);
         return u_dmem.mem[addr[9:2]];
@@ -39,5 +33,16 @@ module pipeline_memory (
         .rsp_valid(p.dmem_rsp_valid),
         .rsp_ready(p.dmem_rsp_ready),
         .rsp_rdata(p.dmem_rsp_rdata)
+    );
+
+    imem_bram #(.DEPTH(256)) u_imem (
+        .clk      (p.clk),
+        .rst      (p.rst),
+        .req_valid(p.imem_req_valid),
+        .req_ready(p.imem_req_ready),
+        .req_addr (p.imem_req_addr),
+        .rsp_valid(p.imem_rsp_valid),
+        .rsp_ready(p.imem_rsp_ready),
+        .rsp_rdata(p.imem_rsp_rdata)
     );
 endmodule

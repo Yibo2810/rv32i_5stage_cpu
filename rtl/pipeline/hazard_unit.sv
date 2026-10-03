@@ -19,7 +19,6 @@ import pipeline_pkg::*;(
 
   input logic        ex_redirect_taken,
 
-  output logic       pc_stall,
   output logic       ifid_flush,
   output logic       ifid_en,
   output logic       idex_en,
@@ -32,7 +31,6 @@ import pipeline_pkg::*;(
   logic load_use_hazard;
 
   always_comb begin
-    pc_stall = 1'b0;
     ifid_en  = 1'b1;  ifid_flush  = 1'b0;
     idex_en  = 1'b1;  idex_flush  = 1'b0;
     exmem_en = 1'b1;  exmem_flush = 1'b0;
@@ -42,13 +40,11 @@ import pipeline_pkg::*;(
                        (id_uses_rs2 && (id_rs2_addr == idex_rd_addr)));
     
     if (wb_trap || halted) begin
-      pc_stall    = 1'b1;
       ifid_flush  = 1'b1;
       idex_flush  = 1'b1;
       exmem_flush = 1'b1;
       memwb_flush = 1'b1;
     end else if (mem_stall) begin
-      pc_stall = 1'b1;
       ifid_en  = 1'b0;
       idex_en  = 1'b0;
       exmem_en = 1'b0;
@@ -57,7 +53,6 @@ import pipeline_pkg::*;(
       ifid_flush = 1'b1;
       idex_flush = 1'b1;
     end else if (load_use_hazard) begin
-      pc_stall   = 1'b1;
       ifid_en    = 1'b0;
       idex_flush = 1'b1;
     end

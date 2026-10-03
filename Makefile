@@ -68,11 +68,6 @@ cov-report-md:
 	python3 scripts/cov_report.py -dir $(COV_DIR) -report $(COV_RPT) \
 	  -format md $(COV_ARGS)
 
-# Reference only: Synopsys `urg` from VCS W-2024.09-SP1 segfaults on this host
-# (Ubuntu 24.04 / glibc 2.39): libsnpsmalloc.so hooks the allocator through
-# __malloc_hook / __free_hook, which glibc removed from the API in 2.34. The
-# coverage data in the .vdb is fine -- only the report generator dies -- so use
-# `cov-report` above. Kept for a glibc <= 2.33 machine or a fixed VCS release.
 urg-report:
 	urg -full64 -dir $(COV_DIR) -report $(BUILD_DIR)/urg_report $(COV_ARGS)
 

@@ -5,8 +5,13 @@ import single_pkg::*;
 import pipeline_pkg::*;(
   input  logic        clk,
   input  logic        rst,
-  input  logic [31:0] imem_rdata,
-  output logic [31:0] imem_addr,
+  output logic        imem_req_valid, // core says: I am ready
+  output logic [31:0] imem_req_addr,
+  input  logic        imem_req_ready, // momory says: I am ready
+
+  output logic        imem_rsp_ready, // core
+  input  logic        imem_rsp_valid, // memory
+  input  logic [31:0] imem_rsp_rdata,
 
   input  logic        dmem_req_ready, // memory says: I am ready to accept a request
   output logic        dmem_req_valid,
@@ -40,7 +45,6 @@ import pipeline_pkg::*;(
   logic [31:0] exmem_fwd_data;
   logic [31:0] memwb_fwd_data;
   logic id_uses_rs1, id_uses_rs2;
-  logic pc_stall;
   logic ifid_flush, ifid_en;
   logic idex_en,    idex_flush;
   logic exmem_en,   exmem_flush;
@@ -49,7 +53,10 @@ import pipeline_pkg::*;(
   logic wb_exc_pending;
   fwd_sel_e fwd_a_sel, fwd_b_sel;
   logic wb_trap;
+  logic ifid_take;
+  logic arbitration_redirect;
 
+  assign arbitration_redirect = ex_redirect_taken && !mem_stall && !wb_trap && !halted;
   assign memwb_fwd_data = wb_rd_data;
   assign wb_exc_pending = memwb_q.valid && memwb_q.exc.valid;
 
@@ -93,12 +100,17 @@ import pipeline_pkg::*;(
   if_stage u_if_stage(
     .clk(clk),
     .rst(rst),
-    .imem_rdata(imem_rdata),
-    .imem_addr(imem_addr),
+    .imem_rsp_rdata(imem_rsp_rdata),
+    .imem_req_addr(imem_req_addr),
+    .imem_req_ready(imem_req_ready),
+    .imem_req_valid(imem_req_valid),
+    .imem_rsp_ready(imem_rsp_ready),
+    .imem_rsp_valid(imem_rsp_valid),
     .ifid_d(ifid_d),
-    .pc_stall(pc_stall),
     .ex_redirect_taken(ex_redirect_taken),
-    .ex_redirect_pc(ex_redirect_pc)
+    .ex_redirect_pc(ex_redirect_pc),
+    .ifid_take(ifid_en && !ifid_flush),
+    .arbitration_redirect(arbitration_redirect)
   );
 
   id_stage u_id_stage (
@@ -167,7 +179,6 @@ import pipeline_pkg::*;(
     .idex_reg_write(idex_q.ctrl.reg_write),
     .idex_rd_addr(idex_q.rd_addr),
     .ex_redirect_taken(ex_redirect_taken),
-    .pc_stall(pc_stall),
     .ifid_flush(ifid_flush),
     .ifid_en(ifid_en),
     .idex_en(idex_en),

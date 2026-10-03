@@ -87,4 +87,14 @@ package pipeline_pkg;
     FWD_EXMEM = 2'b01,
     FWD_MEMWB = 2'b10
    } fwd_sel_e;
+
+   typedef struct packed {
+    logic pending;
+    logic killed;
+    logic [31:0] pending_pc;
+
+    logic        buf_valid;
+    logic [31:0] buf_pc;
+    logic [31:0] buf_instr;
+   } fetch_state_t;
 endpackage

@@ -2,9 +2,10 @@ module pipeline_sva_bind
 import single_pkg::*; 
 import pipeline_pkg::*; (
     input logic clk, rst,
-    input logic [31:0] imem_addr,
+    input logic [31:0] imem_req_addr, imem_rsp_rdata,
+    input logic imem_req_ready, imem_req_valid, imem_rsp_ready, imem_rsp_valid,
     input logic load_use_hazard, mem_stall, wb_trap, halted,
-    input logic ex_redirect_taken, pc_stall, ifid_flush, idex_flush, idex_valid, 
+    input logic ex_redirect_taken, ifid_flush, idex_flush, idex_valid, 
     input logic exmem_reg_write, exmem_mem_read, memwb_reg_write,
     input [31:0] exmem_rd_addr, memwb_rd_addr, idex_rs1_addr, idex_rs2_addr,
     input fwd_sel_e fwd_a_sel, fwd_b_sel,
@@ -94,14 +95,6 @@ import pipeline_pkg::*; (
         return op inside {OPCODE_R_TYPE, OPCODE_STORE, OPCODE_BRANCH};
     endfunction
 
-    redirect_valid_assert: assert property (
-        redirect_taken |-> ifid_q.valid
-    ) else report("redirect_valid_assert");
-
-    pc_stall_assert: assert property (
-        pc_stall |=> $stable(imem_addr)
-    ) else report("pc_stall_assert");
-
     flush_redirect: assert property (
         redirect_taken |-> (ifid_flush == 1'b1) && (idex_flush == 1'b1)
     ) else report("flush_redirect");
@@ -158,8 +151,6 @@ import pipeline_pkg::*; (
         hit["ex_redirect_taken"]++;
     count_redirect_mem_stall    : cover property (ex_redirect_taken && mem_stall)
         hit["ex_redirect_taken && mem_stall"]++;
-    count_pcstall               : cover property (pc_stall)
-        hit["pc_stall"]++;
     count_memstall              : cover property (mem_stall)
         hit["mem_stall"]++;
     count_jump_exmem            : cover property (exmem_q.valid && exmem_q.ctrl_m.wb_sel == WB_PC4)
@@ -268,12 +259,13 @@ import pipeline_pkg::*; (
     endgroup
     cg_redir redir_cov = new();
     final begin
-        string names[$] = '{"redirect_valid_assert", "pc_stall_assert", "flush_redirect", "load_use_assert", 
-        "forward_priority_rs1", "forward_priority_rs2", "forward_priority2_rs1", "forward_priority2_rs2",
-        "load_instr_when_stall", "retire_once", "retire_check", "assume_jump_exmem_bubble", "assume_jump_memwb_bubble"};
+        string names[$] = '{"flush_redirect", "load_use_assert", "forward_priority_rs1", 
+        "forward_priority_rs2", "forward_priority2_rs1", "forward_priority2_rs2",
+        "load_instr_when_stall", "retire_once", "retire_check", "assume_jump_exmem_bubble", 
+        "assume_jump_memwb_bubble"};
 
         string count[$] = '{"load_use_hazard", "hazard_acted","load_use_hazard && mem_stall",
-        "ex_redirect_taken", "ex_redirect_taken && mem_stall", "pc_stall", "mem_stall",
+        "ex_redirect_taken", "ex_redirect_taken && mem_stall", "mem_stall",
          "jump in EX/MEM", "retire"};
 
         foreach (failure[k]) if (!(k inside {names})) $error("unlisted key %s", k);
@@ -309,8 +301,12 @@ endmodule
 bind core_5stage pipeline_sva_bind u_sva(
     .clk(clk),
     .rst(rst),
-    .pc_stall(pc_stall),
-    .imem_addr(imem_addr),
+    .imem_rsp_rdata(imem_rsp_rdata),
+    .imem_req_addr(imem_req_addr),
+    .imem_req_ready(imem_req_ready),
+    .imem_req_valid(imem_req_valid),
+    .imem_rsp_ready(imem_rsp_ready),
+    .imem_rsp_valid(imem_rsp_valid),
     .ifid_q(ifid_q),
     .idex_q(idex_q),
     .exmem_q(exmem_q),

@@ -49,13 +49,13 @@ module pipeline_assertions (
     imem_addr_aligned: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
-        mem.cb.imem_addr[1:0] == 2'b00
+        mem.cb.imem_req_addr[1:0] == 2'b00
     ) else begin fail_count++; $error("check imem_addr_aligned failed"); end
 
     imem_known: assert property (
         @(mem.cb)
         disable iff (mem.cb.rst)
-        !$isunknown({mem.cb.imem_addr, mem.cb.imem_rdata})
+        !$isunknown({mem.cb.imem_req_addr, mem.cb.imem_rsp_rdata})
     ) else begin fail_count++; $error("check imem_known failed"); end
 
     dmem_read_wstrb: assert property (
@@ -105,4 +105,23 @@ module pipeline_assertions (
         disable iff (mem.cb.rst)
         mem.cb.dmem_req_valid && mem.cb.dmem_req_write |-> store_wstrb_ok(mem.cb.mem_instr[14:12], mem.cb.dmem_req_addr[1:0], mem.cb.dmem_req_wstrb)
     ) else begin fail_count++; $error("check store_wstrb_matches_width_and_addr failed"); end
+
+    p_rsp_hold: assert property(
+        @(mem.cb)
+        disable iff (mem.cb.rst)
+        mem.cb.imem_rsp_valid && !mem.cb.imem_rsp_ready |=> mem.cb.imem_rsp_valid && $stable(mem.cb.imem_rsp_rdata)
+    ) else begin fail_count++; $error("check rsp_hold failed"); end
+
+    localparam int IMEM_MAX_LAT = 6;   // TB imem: 1 + MAX_DELAY
+    p_imem_rsp_live: assert property(
+        @(mem.cb)
+        disable iff (mem.cb.rst)
+        mem.cb.imem_req_valid && mem.cb.imem_req_ready |-> ##[1:IMEM_MAX_LAT] mem.cb.imem_rsp_valid
+    ) else begin fail_count++; $error("check imem_rsp_live failed: request accepted, no response within %0d cycles", IMEM_MAX_LAT); end
+
+    p_req_aligned: assert property(
+        @(mem.cb)
+        disable iff (mem.cb.rst)
+        mem.cb.imem_req_valid && mem.cb.imem_req_ready |-> (mem.cb.imem_req_addr[1:0] == 2'b00)
+    ) else begin fail_count++; $error("check req_aligned failed"); end
 endmodule

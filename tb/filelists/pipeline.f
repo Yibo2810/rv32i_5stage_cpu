@@ -3,6 +3,7 @@
 
 tb/sv/pipeline/pipeline_verif_pkg.sv
 tb/sv/pipeline/random/pl_random_pkg.sv
+tb/sv/pipeline/imem_bram.sv
 
 tb/sv/pipeline/pipeline_probe_if.sv
 tb/sv/pipeline/pipeline_memory.sv

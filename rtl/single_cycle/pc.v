@@ -6,10 +6,10 @@ module pc(
   input      [31:0] pc_next,
   output reg [31:0] pc
 );
-
+  parameter RESET_PC = 32'h00000000;
   always @(posedge clk) begin
     if (rst) begin
-      pc <= 32'h00000000;
+      pc <= RESET_PC;
     end
     else begin
       pc <= pc_next;

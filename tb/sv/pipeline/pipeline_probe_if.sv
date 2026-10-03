@@ -4,8 +4,13 @@ interface pipeline_probe_if import single_pkg::*;(
     input logic clk,
     input logic rst
 );
-    logic [31:0] imem_addr;
-    logic [31:0] imem_rdata;
+    logic        imem_req_valid;
+    logic [31:0] imem_req_addr;
+    logic        imem_req_ready;
+
+    logic        imem_rsp_ready;
+    logic        imem_rsp_valid;
+    logic [31:0] imem_rsp_rdata;
 
     logic        dmem_req_ready;
     logic        dmem_req_valid;
@@ -38,7 +43,7 @@ interface pipeline_probe_if import single_pkg::*;(
 
     clocking cb @(posedge clk);
         default input #1step;
-        input imem_addr, imem_rdata;
+        input imem_req_valid, imem_req_addr, imem_req_ready, imem_rsp_ready, imem_rsp_valid, imem_rsp_rdata;
         input mem_pc, mem_instr;
         input dmem_req_ready, dmem_req_valid, dmem_req_write, dmem_req_addr, dmem_req_wdata, dmem_req_wstrb;
         input dmem_rsp_ready, dmem_rsp_rdata, dmem_rsp_valid;
@@ -51,12 +56,17 @@ interface pipeline_probe_if import single_pkg::*;(
     modport pl_core (
         input clk,
         input rst,
-        input imem_rdata,
+        input imem_rsp_rdata,
+        input imem_req_ready,
+        input imem_rsp_valid,
+
         input dmem_rsp_rdata,
         input dmem_req_ready,
         input dmem_rsp_valid,
 
-        output imem_addr,
+        output imem_req_addr,
+        output imem_rsp_ready,
+        output imem_req_valid,
 
         output dmem_req_valid,
         output dmem_req_write,
@@ -75,12 +85,16 @@ interface pipeline_probe_if import single_pkg::*;(
     modport bram (
         input clk,
         input rst,
-        output imem_rdata,
+        output imem_rsp_rdata,
+        output imem_req_ready,
+        output imem_rsp_valid,
         output dmem_rsp_rdata,
         output dmem_req_ready,
         output dmem_rsp_valid,
 
-        input imem_addr,
+        input imem_req_addr,
+        input imem_rsp_ready,
+        input imem_req_valid,
 
         input dmem_req_valid,
         input dmem_req_write,
@@ -95,11 +109,15 @@ interface pipeline_probe_if import single_pkg::*;(
         clocking cb,
         input clk,
         input rst,
-        input imem_rdata,
+        input imem_rsp_rdata,
+        input imem_req_ready,
+        input imem_rsp_valid,
+        input imem_req_addr,
+        input imem_rsp_ready,
+        input imem_req_valid,
         input dmem_rsp_rdata,
         input dmem_req_ready,
         input dmem_rsp_valid,
-        input imem_addr,
         input dmem_req_valid,
         input dmem_req_write,
         input dmem_req_addr,
