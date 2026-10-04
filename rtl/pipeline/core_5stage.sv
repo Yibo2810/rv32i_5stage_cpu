@@ -53,7 +53,6 @@ import pipeline_pkg::*;(
   logic wb_exc_pending;
   fwd_sel_e fwd_a_sel, fwd_b_sel;
   logic wb_trap;
-  logic ifid_take;
   logic arbitration_redirect;
 
   assign arbitration_redirect = ex_redirect_taken && !mem_stall && !wb_trap && !halted;

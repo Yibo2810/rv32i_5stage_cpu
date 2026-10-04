@@ -4,6 +4,15 @@ Status: **frozen in v0.5.0 — verified in simulation; synthesized and run on an
 Arty A7-100T in v0.6.0 ([12_v0_6_0_milestone.md](12_v0_6_0_milestone.md)).**
 Last updated: 2026-09-30.
 
+> **v0.7.0 (in progress, branch `feature/fpga-arty-a7`):** `pc_stall` no longer
+> exists. The PC advances only when an instruction request is accepted, and a
+> redirect also retargets a fetch request that has not been accepted yet — see
+> [13_v0_7_0_milestone.md §3](13_v0_7_0_milestone.md#3-if-stage-rtlpipelineif_stagesv).
+> The `pc_stall` statements in §1, §3.2, §4.2, §5, §6 and invariant 6 of §7
+> describe v0.5.0. Forwarding, the load-use bubble, the redirect flush, the
+> global freeze and the priority order of the `*_en` / `*_flush` signals are
+> unchanged.
+
 This document describes how the five-stage pipeline keeps instruction ordering:
 the two forwarding paths, the load-use stall, the redirect flush, the memory
 stall freeze, and the priority order that arbitrates them.

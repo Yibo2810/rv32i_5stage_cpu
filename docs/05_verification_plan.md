@@ -233,6 +233,31 @@ waived coverage              sub-word loads into branches/JALR/addresses,
 external reference           riscv-arch-test signatures, Spike or Sail
 ```
 
+## Request/Response Instruction Fetch (v0.7.0, in progress)
+
+Details and numbers: [13_v0_7_0_milestone.md](13_v0_7_0_milestone.md).
+
+| Change | Why |
+|---|---|
+| `tb/sv/pipeline/imem_bram.sv`: testbench instruction memory with random `req_ready`, latency `1 + d` (60 % zero-wait), response hold, back-to-back acceptance | Exercises every fetch path of the new IF while keeping instructions adjacent, so hazards still occur |
+| Per-seed random stream (`$dist_uniform` on a state reloaded at reset, `u_memory.reseed(seed)`) | `+SINGLE_SEED=N` reproduces the cycle timing of seed N in a batch run, not only its program |
+| `p_rsp_hold`, `p_req_aligned`, `p_imem_rsp_live`; interface assertions gate the verdict | Protocol and liveness of the fetch channel are checked at the cycle they break |
+| `DEADLOCK` (200 cycles without a retire) / `TIMEOUT` (4000 cycles, still retiring) with a state dump | A hang names itself and shows which side of the handshake is waiting |
+
+Rules that came out of this phase:
+
+- **The memory model bounds what the regression can reach.** A model that
+  fetches once every three cycles made load-use stalls impossible while every
+  check stayed green; watch the hazard counters, not only the pass line.
+- **Both sides of an interface need their own checks.** The IF and the memory
+  model hid each other's defects until assertions and negative tests were
+  aimed at each side separately.
+- **A random model must be seeded per test case**, like the data memory is
+  cleared per seed.
+
+The "back-pressure stimulus" item above is done for the instruction memory; the
+data memory still answers in one cycle with `req_ready = 1`.
+
 `programs/asm/hazard_test.S`, a stub at v0.5.0, was written for v0.6.0 (see the
 directed-test table above and [12_v0_6_0_milestone.md](12_v0_6_0_milestone.md)).
 It runs in `fpga_sys_tb` and on the board; the `pipeline_tb` `+HEX=` smoke run

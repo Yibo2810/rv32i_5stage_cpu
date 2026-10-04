@@ -22,8 +22,13 @@ import single_pkg::*;
     output logic mark_seen,
     output logic error_trap
 );
-    logic [31:0] imem_rdata;
-    logic [31:0] imem_addr;
+    logic        imem_req_valid;
+    logic [31:0] imem_req_addr;
+    logic        imem_req_ready;
+
+    logic        imem_rsp_ready;
+    logic        imem_rsp_valid;
+    logic [31:0] imem_rsp_rdata;
 
     logic        dmem_req_ready;
     logic        dmem_req_valid;
@@ -78,8 +83,12 @@ import single_pkg::*;
     core_5stage u_core (
         .clk           (clk),
         .rst           (rst),
-        .imem_addr     (imem_addr),
-        .imem_rdata    (imem_rdata),
+        .imem_req_valid(imem_req_valid),
+        .imem_req_ready(imem_req_ready),
+        .imem_req_addr (imem_req_addr),
+        .imem_rsp_valid(imem_rsp_valid),
+        .imem_rsp_ready(imem_rsp_ready),
+        .imem_rsp_rdata(imem_rsp_rdata),
         .dmem_req_valid(dmem_req_valid),
         .dmem_req_ready(dmem_req_ready),
         .dmem_req_write(dmem_req_write),
@@ -110,7 +119,13 @@ import single_pkg::*;
     );
 
     imem_rom #(.DEPTH(IMEM_WORDS), .INIT_FILE(IMEM_INIT)) u_imem (
-        .addr(imem_addr),
-        .rdata(imem_rdata)
+        .clk      (clk),
+        .rst      (rst),
+        .imem_req_valid(imem_req_valid),
+        .imem_req_ready(imem_req_ready),
+        .imem_req_addr (imem_req_addr),
+        .imem_rsp_valid(imem_rsp_valid),
+        .imem_rsp_ready(imem_rsp_ready),
+        .imem_rsp_rdata(imem_rsp_rdata)
     );
     endmodule

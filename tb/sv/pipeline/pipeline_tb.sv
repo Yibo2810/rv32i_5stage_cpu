@@ -59,14 +59,14 @@ module pipeline_tb;
                  pif.imem_req_valid, pif.imem_req_ready, pif.imem_req_addr,
                  pif.imem_rsp_valid, pif.imem_rsp_ready);
         $display("  imem slave  : busy_q=%0b delay_q=%0d",
-                 u_memory.u_imem.busy_q, u_memory.u_imem.delay_q);
+                 u_memory.u_imem.busy_q, u_memory.u_imem.delay_q);  // it wil be wrong when synthesis.
         $display("  pipe valid  : ifid=%0b idex=%0b exmem=%0b memwb=%0b | mem_stall=%0b halted=%0b",
                  u_core.ifid_q.valid, u_core.idex_q.valid, u_core.exmem_q.valid, u_core.memwb_q.valid,
                  u_core.mem_stall, pif.halted);
         $display("  dmem        : req valid=%0b ready=%0b | rsp valid=%0b ready=%0b",
                  pif.dmem_req_valid, pif.dmem_req_ready, pif.dmem_rsp_valid, pif.dmem_rsp_ready);
     endtask
-    
+
     task automatic run_until_halt(
         input int unsigned max_cycles,
         output int unsigned cycles,

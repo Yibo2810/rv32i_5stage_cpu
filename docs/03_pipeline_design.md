@@ -4,6 +4,14 @@ Status: **frozen in v0.5.0 — verified in simulation; synthesized and run on an
 Arty A7-100T in v0.6.0 ([12_v0_6_0_milestone.md](12_v0_6_0_milestone.md)).**
 Last updated: 2026-09-30.
 
+> **v0.7.0 (in progress, branch `feature/fpga-arty-a7`): instruction fetch is
+> now request/response** — see [13_v0_7_0_milestone.md](13_v0_7_0_milestone.md).
+> On that branch the following parts of this document describe the v0.5.0 /
+> v0.6.0 core and no longer match the RTL: the IF and `hazard_unit` rows of §1
+> (`pc_stall` was removed), the instruction-memory row of §5.4, the Fetch ports
+> in §6, the `pc_stall` clause of invariant 2 in §7, and the "Instruction memory
+> on BRAM" row of §8. The data-memory interface (§5.1–§5.3) is unchanged.
+
 This document describes the five-stage pipeline that replaces the verified
 single-cycle datapath: the stage partition, the pipeline register payloads, the
 unified exception token, the commit rule, and the request/response memory

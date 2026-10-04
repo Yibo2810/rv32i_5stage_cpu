@@ -26,6 +26,18 @@ baseline, and its regression still passes on the current tree.
 
 ## Current Milestone
 
+**In progress: v0.7.0 request/response instruction fetch**
+(see [docs/13_v0_7_0_milestone.md](docs/13_v0_7_0_milestone.md))
+
+The IF stage now fetches through a single-outstanding request/response
+interface with in-flight kill, a one-entry fetch buffer and response
+back-pressure, so the instruction memory can move to block RAM. Against a
+testbench memory with random readiness and latency, the 500-seed regression
+passes with the same commit stream as v0.5.0. The FPGA wrapper is ported:
+with the instruction ROM in block RAM, the self-checking `hazard_test` passes
+in `fpga_sys_tb` (215 cycles) and on the Arty A7-100T at 25 MHz (WNS +20.4 ns,
+board smoke test 2026-10-03, passing case only).
+
 **v0.6.0: FPGA bring-up on an Arty A7-100T — board smoke test passed**
 (see [docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md))
 
@@ -243,7 +255,8 @@ Important files:
 | `rtl/include/single_pkg.sv` | Shared SystemVerilog RV32I constants and control types |
 | `rtl/single_cycle/` | Current verified single-cycle CPU RTL |
 | `rtl/pipeline/` | Five-stage pipeline RTL: `{if,id,ex,mem,wb}_stage.sv`, `pipeline_regs.sv`, `hazard_unit.sv`, `forwarding_unit.sv`, `core_5stage.sv`, `memory/dmem_bram.sv` (see [docs/03_pipeline_design.md](docs/03_pipeline_design.md)) |
-| `rtl/fpga/rtl/` | Portable FPGA system: `imem_rom.sv` (instruction ROM, combinational read) and `fpga_sys.sv` (core + memories + trap latch + `tohost` observer + pass/fail) |
+| `rtl/fpga/rtl/` | Portable FPGA system: `imem_rom.sv` (instruction ROM, request/response, synchronous read in block RAM) and `fpga_sys.sv` (core + memories + trap latch + `tohost` observer + pass/fail) |
+| `rtl/fpga/vivado_notes/` | Vivado notes (Chinese): synthesis-log review, memory inference, utilization, timing-report reading, Fmax method, netlist simulation, Tcl, run history |
 | `rtl/fpga/arty_a7/` | Arty A7-100T board wrapper (`arty_a7_top.sv`: MMCM, reset synchronizer, LED views) and pin constraints (`arty_a7.xdc`) |
 | `rtl/fpga/tb/fpga_sys_tb.sv` | VCS testbench for `fpga_sys`: backdoor program load (`+MEM=`), run to halt, verdict checks (`+EXPECT_TOHOST=`) |
 | `tb/sv/core/core_sv_tb.sv` | VCS top-level SystemVerilog harness |

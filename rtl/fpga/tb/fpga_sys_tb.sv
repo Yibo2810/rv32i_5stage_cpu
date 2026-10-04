@@ -78,7 +78,7 @@ module fpga_sys_tb;
         $display("SUMMARY tohost_seen=%0d tohost=%08h pass=%0d fail=%0d error_trap=%0d mark_seen=%0d",
                  tohost_seen, tohost, pass, fail, error_trap, mark_seen);
         if (timeout)
-            $display("TIMEOUT: PC = %08h", u_sys.u_core.imem_addr);   // hierarchical peek, no net needed
+            $display("TIMEOUT: PC = %08h", u_sys.u_core.imem_req_addr);   // hierarchical peek, no net needed
 
         if (!halted) report("halted");
         if (trap_cause_q != EXC_BREAKPOINT) report("cause");

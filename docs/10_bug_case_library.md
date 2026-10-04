@@ -26,6 +26,9 @@
 | 22 | 2026-09-29 | Repository-relative `$readmemh` path unreadable in a Vivado project; the ROM would be all zero | Build flow | `[Synth 8-4445]` in a scratch project-mode test, with the `.mem` already added to the project |
 | 23 | 2026-09-29 | On-chip verdict without `tohost == 1`: a failing self-check would light PASS | Checker (verdict, in RTL) | Review; the code was lint-clean |
 | 24 | 2026-09-29 | Deleted branch labels assembled without an error | Tooling (`asm_to_hex.sh` never links) | Review; GNU `as` exits 0 and leaves unresolved relocations |
+| 25 | 2026-10-02 | Instruction-memory model accepted one fetch every three cycles; load-use, EX/MEM forwarding and redirect-behind-memory never occurred while the regression passed | Testbench model (throughput) | Hazard cover counts of zero; same core against a pipelined model |
+| 26 | 2026-10-02 | Same-cycle accept erased by a later nonblocking assignment; the core deadlocked and the log showed only a commit-count mismatch | Testbench model (ordering) + observability | 30 of 30 seeds failing with one commit each |
+| 27 | 2026-10-02 | Memory model would accept a second request during its latency countdown, hidden by an IF that never requests while a fetch is pending | Testbench model (latent protocol) | Review |
 
 ---
 
@@ -78,3 +81,11 @@
 14. **An on-chip verdict is a checker too** (Case 23). It needs the same
     independent expectation as a testbench verdict, and a negative run that
     shows it can say FAIL.
+15. **The partner on an interface bounds what the regression can see.** A slow
+    memory model makes whole hazard classes structurally impossible (Case 25),
+    and a well-behaved master hides a slave that breaks the protocol (Case 27).
+    Give each side its own assertions and negative tests, and gate on hazard
+    counts, not only on the pass line.
+16. **A hang must name itself** (Case 26): stop on lack of progress, tell
+    deadlock from non-termination, and print which side of each handshake is
+    waiting.

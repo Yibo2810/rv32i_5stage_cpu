@@ -21,7 +21,6 @@ import pipeline_pkg::*;(
 );
   logic [31:0] pc_current;
   logic [31:0] pc_next;
-  logic [31:0] pc_plus_4;
   fetch_state_t fetch_d, fetch_q;
   logic imem_req_fire;
   logic imem_rsp_fire;
