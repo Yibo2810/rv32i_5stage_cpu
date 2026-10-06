@@ -6,6 +6,7 @@ class pl_program;
     localparam int LOOP_N_MAX = 8;
     localparam int LOOP_K_MAX = 6;
     localparam int LOOP_PCT   = 20;
+    logic [31:0] text_base = 32'h0;   // instrs[0] address = core RESET_PC; only emit_jalr uses it
 
     function void load_imem(ref logic [31:0] imem [0:255]);
         foreach (instrs[k]) begin
@@ -15,6 +16,8 @@ class pl_program;
 
     function void build(int seed);
         instr_kind_e br_kinds[6] = '{INSTR_BEQ, INSTR_BNE, INSTR_BLT, INSTR_BGE, INSTR_BLTU, INSTR_BGEU};
+        if (text_base[11:0] != 12'h0)
+            $fatal(1, "pl_program: text_base %08h must be 4 KB aligned (lui + addi jalr target)", text_base);
         this.srandom(seed);
         process::self().srandom(seed);
         instrs.delete();
@@ -260,23 +263,33 @@ class pl_program;
         logic [4:0] xS = 5'd28;
         logic [4:0] xT = 5'd27;
         int base, jalr_idx, land_idx, abs;
+        int ext = (text_base != 32'h0);   // extra lui for the upper target bits
         base     = instrs.size();
         if (jal_sw == 1'b0) begin
-            jalr_idx = base + 1;
-            land_idx = base + 2 + M;
+            jalr_idx = base + 1 + ext;
+            land_idx = base + 2 + M + ext;
             abs      = 4 * land_idx;
             if (abs > 2047) begin push_straightline(); return; end
-            instrs.push_back(mk_fixed(INSTR_ADDI, xS,   5'd0, 5'd0, abs));
-            instrs.push_back(mk_fixed(INSTR_JALR, 5'd1, xS,   5'd0, 0));
-        end else if (jal_sw == 1'b1) begin
-            jalr_idx = base + 3;
-            land_idx = base + 4 + M;
+            if (ext) begin
+                instrs.push_back(mk_fixed(INSTR_LUI,  xS, 5'd0, 5'd0, text_base));
+                instrs.push_back(mk_fixed(INSTR_ADDI, xS, xS,   5'd0, abs));
+            end else
+                instrs.push_back(mk_fixed(INSTR_ADDI, xS,   5'd0, 5'd0, abs));
+                instrs.push_back(mk_fixed(INSTR_JALR, 5'd1, xS,   5'd0, 0));
+        end 
+        else if (jal_sw == 1'b1) begin
+            jalr_idx = base + 3 + ext;
+            land_idx = base + 4 + M + ext;
             abs      = 4 * land_idx;
             if (abs > 2047) begin push_straightline(); return; end
-            instrs.push_back(mk_fixed(INSTR_ADDI, xT,   5'd0, 5'd0, abs));
-            instrs.push_back(mk_fixed(INSTR_SW, 5'd0, 5'd0, xT, 64));
-            instrs.push_back(mk_fixed(INSTR_LW, xS, 5'd0, 5'd0, 64));
-            instrs.push_back(mk_fixed(INSTR_JALR, 5'd1, xS,   5'd0, 0));
+            if (ext) begin
+                instrs.push_back(mk_fixed(INSTR_LUI,  xT, 5'd0, 5'd0, text_base));
+                instrs.push_back(mk_fixed(INSTR_ADDI, xT, xT,   5'd0, abs));
+            end else
+                instrs.push_back(mk_fixed(INSTR_ADDI, xT,   5'd0, 5'd0, abs));
+                instrs.push_back(mk_fixed(INSTR_SW, 5'd0, 5'd0, xT, 64));
+                instrs.push_back(mk_fixed(INSTR_LW, xS, 5'd0, 5'd0, 64));
+                instrs.push_back(mk_fixed(INSTR_JALR, 5'd1, xS,   5'd0, 0));
         end 
         for (int j = 0; j < M; j++) push_straightline();
     endfunction

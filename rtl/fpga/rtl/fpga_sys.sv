@@ -3,10 +3,12 @@
 module fpga_sys
 import single_pkg::*;
 #(
-    parameter int IMEM_WORDS = 256,
-    parameter int DMEM_WORDS = 256,
-    parameter string IMEM_INIT = "hazard_test.mem",
-    parameter logic [31:0] TOHOST_ADDR = 32'h0000_03FC
+    parameter logic [31:0] RESET_PC  = 32'h8000_0000,
+    parameter logic [31:0] RAM_BASE  = 32'h8000_0000,
+    parameter int          RAM_AW    = 16,              // RAM = 2**16 B = 64 KB
+    parameter logic [31:0] MMIO_BASE = 32'h1000_0000,
+    parameter int          MMIO_AW   = 12,              // MMIO = 4 KB, see mmio_regs word_off
+    parameter string       RAM_INIT  = "mmap_test.mem"
 ) (
     input logic clk,
     input logic rst,
@@ -22,6 +24,8 @@ import single_pkg::*;
     output logic mark_seen,
     output logic error_trap
 );
+    localparam int RAM_WORDS = 1 << (RAM_AW - 2);   // sys_ram depth = RAM region size / 4
+
     logic        imem_req_valid;
     logic [31:0] imem_req_addr;
     logic        imem_req_ready;
@@ -65,22 +69,10 @@ import single_pkg::*;
         end
     end
 
-    always_ff @( posedge clk ) begin
-        if (rst) begin
-            tohost_seen <= 1'b0;
-            tohost <= 32'b0;
-        end else begin
-            if (dmem_req_valid && dmem_req_ready && dmem_req_write && dmem_req_addr == TOHOST_ADDR && dmem_req_wstrb == 4'b1111 && !tohost_seen) begin
-                tohost <= dmem_req_wdata;
-                tohost_seen <= 1'b1;
-            end
-        end
-    end
-
     assign pass = halted && trap_cause_q == EXC_BREAKPOINT && tohost_seen && tohost == 32'd1;
     assign fail = halted && !pass;
 
-    core_5stage u_core (
+    core_5stage #(.RESET_PC(RESET_PC)) u_core (
         .clk           (clk),
         .rst           (rst),
         .imem_req_valid(imem_req_valid),
@@ -104,23 +96,18 @@ import single_pkg::*;
         .halted        (halted)
     );
 
-    dmem_bram #(.DEPTH(DMEM_WORDS)) u_dmem (
+    sys_ram #(.DEPTH(RAM_WORDS), .INIT_FILE(RAM_INIT)) u_ram (
         .clk      (clk),
         .rst      (rst),
-        .req_valid(dmem_req_valid),
-        .req_ready(dmem_req_ready),
-        .req_write(dmem_req_write),
-        .req_addr (dmem_req_addr),
-        .req_wdata(dmem_req_wdata),
-        .req_wstrb(dmem_req_wstrb),
-        .rsp_valid(dmem_rsp_valid),
-        .rsp_ready(dmem_rsp_ready),
-        .rsp_rdata(dmem_rsp_rdata)
-    );
-
-    imem_rom #(.DEPTH(IMEM_WORDS), .INIT_FILE(IMEM_INIT)) u_imem (
-        .clk      (clk),
-        .rst      (rst),
+        .req_valid(ram_req_valid),
+        .req_ready(ram_req_ready),
+        .req_write(ram_req_write),
+        .req_addr (ram_req_addr),
+        .req_wdata(ram_req_wdata),
+        .req_wstrb(ram_req_wstrb),
+        .rsp_valid(ram_rsp_valid),
+        .rsp_ready(ram_rsp_ready),
+        .rsp_rdata(ram_rsp_rdata),
         .imem_req_valid(imem_req_valid),
         .imem_req_ready(imem_req_ready),
         .imem_req_addr (imem_req_addr),

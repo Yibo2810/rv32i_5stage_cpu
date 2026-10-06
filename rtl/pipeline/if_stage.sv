@@ -1,7 +1,8 @@
 `timescale 1ns/1ps
 
 module if_stage
-import pipeline_pkg::*;(
+import pipeline_pkg::*;
+#(parameter logic [31:0] RESET_PC = 32'h0000_0000) (
   input logic clk,
   input logic rst,
   input logic ex_redirect_taken,
@@ -67,7 +68,7 @@ import pipeline_pkg::*;(
     else if (ex_redirect_taken) pc_next = ex_redirect_pc;
   end
 
-  pc u_pc (
+  pc #(.RESET_PC(RESET_PC)) u_pc (
     .clk(clk),
     .rst(rst),
     .pc_next(pc_next),

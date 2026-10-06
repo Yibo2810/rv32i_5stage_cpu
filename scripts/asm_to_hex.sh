@@ -10,6 +10,9 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 ASM_DIR="${ASM_DIR:-$REPO_ROOT/programs/asm}"
 HEX_DIR="${HEX_DIR:-$REPO_ROOT/programs/hex}"
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/sim/build/asm}"
+# Empty: hex is taken from the unlinked .o (text at 0, the core-TB flow).
+# Set (e.g. LINK_BASE=0x80000000): link with ld -Ttext, keep the .elf for Spike.
+LINK_BASE="${LINK_BASE:-}"
 
 die() {
     echo "asm_to_hex.sh: $*" >&2
@@ -37,6 +40,7 @@ find_riscv_tool() {
 AS="${RISCV_AS:-$(find_riscv_tool as || true)}"
 OBJCOPY="${RISCV_OBJCOPY:-$(find_riscv_tool objcopy || true)}"
 OBJDUMP="${RISCV_OBJDUMP:-$(find_riscv_tool objdump || true)}"
+LD="${RISCV_LD:-$(find_riscv_tool ld || true)}"
 
 [ -n "$AS" ] || die "cannot find RISC-V assembler. Install a RISC-V ELF binutils/gcc toolchain, or set RISCV_PREFIX/RISCV_AS."
 [ -n "$OBJCOPY" ] || die "cannot find RISC-V objcopy. Install a RISC-V ELF binutils/gcc toolchain, or set RISCV_PREFIX/RISCV_OBJCOPY."
@@ -84,9 +88,17 @@ assemble_one() {
     preprocess_asm "$src" "$pp"
 
     "$AS" -march="$ARCH" -mabi="$ABI" -o "$obj" "$pp"
-    "$OBJCOPY" -O binary -j .text "$obj" "$bin"
+    img=$obj
+    if [ -n "$LINK_BASE" ]; then
+        [ -n "$LD" ] || die "cannot find RISC-V ld (needed for LINK_BASE). Set RISCV_PREFIX/RISCV_LD."
+        img="$BUILD_DIR/$name.elf"
+        # -N: no page alignment. Without it the first LOAD segment (ELF header
+        # included) starts at LINK_BASE-0x1000, which Spike rejects.
+        "$LD" -m elf32lriscv -N --no-warn-rwx-segments -Ttext="$LINK_BASE" -e _start -o "$img" "$obj"
+    fi
+    "$OBJCOPY" -O binary -j .text "$img" "$bin"
     hexdump -v -e '1/4 "%08x\n"' "$bin" > "$hex"
-    "$OBJDUMP" -d "$obj" > "$dump"
+    "$OBJDUMP" -d "$img" > "$dump"
 
     echo "generated $hex"
     echo "dumped    $dump"

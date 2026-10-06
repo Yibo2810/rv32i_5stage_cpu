@@ -1,6 +1,8 @@
 `timescale 1ns/1ps
 
-module pipeline_tb;
+module pipeline_tb #(
+    parameter logic [31:0] RESET_PC = 32'h0000_0000
+);
     import single_pkg::*;
     import pipeline_verif_pkg::*;
     import pl_random_pkg::*;
@@ -119,12 +121,14 @@ module pipeline_tb;
         bit ok = 1'b1;
         int unsigned sva_before = u_core.u_sva.fail_count;
 
+        p.text_base = RESET_PC;
         p.build(seed);
         u_memory.clear_dmem();
         u_memory.init_mem();
         p.load_imem(u_memory.u_imem.mem);
 
         ref_model = new();
+        ref_model.text_base = RESET_PC;
         for (int i = 0; i < 256; i++)
             ref_model.dmem[i] = u_memory.peek_dmem(i*4);
         ref_model.run_iss(u_memory.u_imem.mem, RUN_BUDGET);
@@ -156,6 +160,8 @@ module pipeline_tb;
         repeat (2) @(negedge clk);       // when ebreak, run 2 cycles to see the state after break
 
         // random test
+        if (RESET_PC != 32'h0)
+            $display("RANDOM TEST: RESET_PC=%08h (text relocated, data x0-relative)", RESET_PC);
         void'($value$plusargs("SEED_OFFSET=%0d", seed_offset));
         void'($value$plusargs("NUM_SEEDS=%0d", num_seeds));
         if ($value$plusargs("SINGLE_SEED=%0d", single_seed)) begin
@@ -207,7 +213,7 @@ module pipeline_tb;
     pipeline_scoreboard u_scoreboard();
     pipeline_assertions u_assertions (pif.pipeline_monitor);
 
-    core_5stage u_core (
+    core_5stage #(.RESET_PC(RESET_PC)) u_core (
         .clk           (clk),
         .rst           (rst),
         .imem_req_valid(pif.imem_req_valid),

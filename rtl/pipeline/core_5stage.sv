@@ -1,8 +1,9 @@
 `timescale 1ns/1ps
 
-module core_5stage 
+module core_5stage
 import single_pkg::*;
-import pipeline_pkg::*;(
+import pipeline_pkg::*;
+#(parameter logic [31:0] RESET_PC = 32'h0000_0000)(
   input  logic        clk,
   input  logic        rst,
   output logic        imem_req_valid, // core says: I am ready
@@ -96,7 +97,7 @@ import pipeline_pkg::*;(
     .exmem_flush (exmem_flush)
   );
 
-  if_stage u_if_stage(
+  if_stage #(.RESET_PC(RESET_PC)) u_if_stage(
     .clk(clk),
     .rst(rst),
     .imem_rsp_rdata(imem_rsp_rdata),

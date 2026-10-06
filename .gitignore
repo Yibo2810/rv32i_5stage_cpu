@@ -35,3 +35,4 @@ scripts/cov_report.py
 
 # FPGA
 rtl/fpga/build/
+rtl/fpga/vivado_notes/

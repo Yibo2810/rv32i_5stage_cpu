@@ -95,7 +95,8 @@ pl-build:
 	-f $(PL_FILELIST) \
 	-Mdir=$(PL_BUILD_DIR)/csrc \
 	-o $(PL_SIMV) \
-	-l $(PL_BUILD_DIR)/compile.log
+	-l $(PL_BUILD_DIR)/compile.log \
+	$(PL_VCS_ARGS)
 
 pl-run: pl-build
 	./$(PL_SIMV) +SEED_OFFSET=$$(date +%s) $(ARGS) -l $(PL_BUILD_DIR)/run.log

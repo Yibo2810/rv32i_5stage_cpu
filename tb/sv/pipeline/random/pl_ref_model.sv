@@ -3,6 +3,7 @@ class pl_ref_model;
     logic [31:0] dmem[256];
     logic [31:0] pc;
     logic [31:0] final_pc;
+    logic [31:0] text_base = 32'h0;   // img[0] address = core RESET_PC
     int unsigned retired;
     core_mem_expect_t expected_txns[$];
     localparam int WATCHDOG = 100000;
@@ -12,7 +13,7 @@ class pl_ref_model;
 
     function void reset();
         foreach(regs[i]) regs[i] = 32'b0;
-        pc = 32'b0;
+        pc = text_base;
         final_pc = 32'b0;
         retired = 0;
         commits.delete();
@@ -25,10 +26,10 @@ class pl_ref_model;
         reset();
         hit_break = 0;
         while (steps < budget) begin
-            int unsigned idx = pc >> 2;
+            int unsigned idx = (pc - text_base) >> 2;
             logic [31:0] w;
             if (idx >= 256)
-                $fatal(1, "ISS PC escaped imem: pc=%08h idx=%0d", pc, idx);
+                $fatal(1, "ISS PC escaped imem: pc=%08h text_base=%08h idx=%0d", pc, text_base, idx);
             if (pc[1:0] != 2'b00)
                 $fatal(1, "ISS misaligned PC: pc=%08h", pc);
             w = img[idx];

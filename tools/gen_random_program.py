@@ -88,6 +88,7 @@ class GeneratorConfig:
     scratch_base: int
     scratch_words: int
     random_imm_rate: float
+    data_base: int = 0
 
     def validate(self) -> None:
         unknown = sorted(set(self.categories) - set(ALL_CATEGORIES))
@@ -108,6 +109,12 @@ class GeneratorConfig:
             raise GeneratorError("scratch memory must stay inside dmem[0:255]")
         if not (0.0 <= self.random_imm_rate <= 1.0):
             raise GeneratorError("--random-imm-rate must be in range 0.0..1.0")
+        if not (0 <= self.data_base <= 0xFFFFFFFF) or self.data_base % 0x1000:
+            raise GeneratorError("--data-base must be a 4 KB aligned 32-bit address")
+        # With a nonzero data base the signature is stored through ADDR_REG, at
+        # offsets 4*reg - scratch_base, which must fit a signed imm12.
+        if self.data_base and self.scratch_base > 2048:
+            raise GeneratorError("--scratch-base must be <= 2048 when --data-base is set")
 
 
 class ProgramBuilder:
@@ -145,6 +152,10 @@ class ProgramBuilder:
             f"# categories: {','.join(self.config.categories)}",
             f"# scratch_base: 0x{self.config.scratch_base:08x}",
             f"# scratch_words: {self.config.scratch_words}",
+        ]
+        if self.config.data_base:
+            header.append(f"# data_base: 0x{self.config.data_base:08x}")
+        header += [
             "# constraints: legal supported subset only",
             "# constraints: aligned LW/SW only",
             "# constraints: forward-only branch/JAL blocks, no JALR, no loops",
@@ -190,7 +201,14 @@ class RandomProgramGenerator:
             self.builder.emit(f"addi x{reg}, x0, {self.imm12()}")
 
         self.builder.comment("aligned scratch-memory base")
-        self.builder.emit(f"addi x{ADDR_REG}, x0, {self.config.scratch_base}")
+        addr = self.config.data_base + self.config.scratch_base
+        if -2048 <= addr <= 2047:
+            self.builder.emit(f"addi x{ADDR_REG}, x0, {addr}")
+        else:
+            hi = ((addr + 0x800) >> 12) & 0xFFFFF
+            lo = addr - (((addr + 0x800) >> 12) << 12)
+            self.builder.emit(f"lui  x{ADDR_REG}, 0x{hi:x}")
+            self.builder.emit(f"addi x{ADDR_REG}, x{ADDR_REG}, {lo}")
 
         self.builder.comment("deterministic scratch-memory initialization")
         for word_index in range(self.config.scratch_words):
@@ -202,7 +220,11 @@ class RandomProgramGenerator:
         self.builder.emit()
         self.builder.comment("final architectural signature")
         for reg in range(self.config.signature_words):
-            self.builder.emit(f"sw   x{reg}, {4 * reg}(x0)")
+            if self.config.data_base:
+                # ADDR_REG = data_base + scratch_base and is never a random rd.
+                self.builder.emit(f"sw   x{reg}, {4 * reg - self.config.scratch_base}(x{ADDR_REG})")
+            else:
+                self.builder.emit(f"sw   x{reg}, {4 * reg}(x0)")
 
     def emit_alu_op(self) -> None:
         form = self.rng.choice(("r", "i", "shift_i"))
@@ -341,6 +363,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scratch-base", type=lambda value: int(value, 0), default=0x100)
     parser.add_argument("--scratch-words", type=int, default=32)
     parser.add_argument(
+        "--data-base",
+        type=lambda value: int(value, 0),
+        default=0,
+        help="data window base (default 0 = x0-relative); e.g. 0x80010000 for Spike / FPGA SoC RAM",
+    )
+    parser.add_argument(
         "--random-imm-rate",
         type=float,
         default=0.25,
@@ -363,6 +391,7 @@ def main() -> int:
         scratch_base=args.scratch_base,
         scratch_words=args.scratch_words,
         random_imm_rate=args.random_imm_rate,
+        data_base=args.data_base,
     )
 
     text = RandomProgramGenerator(config).generate()
