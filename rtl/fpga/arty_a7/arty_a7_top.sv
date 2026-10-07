@@ -30,8 +30,10 @@ module arty_a7_top (
     logic halted;
     logic pass;
     logic fail;
+    logic bus_err;
 
     assign reset_async = !reset_n | !mmcm_locked;
+    assign led1_b = bus_err;
 
     always_ff @(posedge clk_25mhz or posedge reset_async) begin
         if (reset_async)
@@ -103,7 +105,6 @@ module arty_a7_top (
     assign led0_b = 1'b0;
     assign led1_r = timeout ? timeout_blink : fail;
     assign led1_g = 1'b0;
-    assign led1_b = 1'b0;
 
     MMCME2_BASE #(
         .CLKIN1_PERIOD      (10.0),
@@ -145,6 +146,7 @@ module arty_a7_top (
         .pass(pass),
         .fail(fail),
         .mark_seen(mark_seen),
-        .error_trap(error_trap)
+        .error_trap(error_trap),
+        .bus_err(bus_err)
     );
 endmodule

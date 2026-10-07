@@ -3,8 +3,9 @@
 A learning-oriented RV32I CPU project implemented in Verilog and
 SystemVerilog.
 
-**Current: v0.7.1, in progress** — reset PC at `0x8000_0000`, one RAM behind
-an address map (RAM / MMIO). `v0.7.x` are the steps toward running C programs;
+**Current: v0.7.1** — reset PC at `0x8000_0000`, one RAM for text and data
+behind an address map (RAM / MMIO / unmapped), integration-tested in
+simulation, board smoke test passed. `v0.7.x` are the steps toward running C programs;
 `v0.8.0` will mark a self-checking C program running on the SoC in simulation
 and on the board. See [docs/14_v0_7_1_milestone.md](docs/14_v0_7_1_milestone.md).
 
@@ -30,14 +31,18 @@ baseline, and its regression still passes on the current tree.
 
 ## Current Milestone
 
-**In progress: v0.7.1 address map and unified memory**
-(see [docs/14_v0_7_1_milestone.md](docs/14_v0_7_1_milestone.md))
+**v0.7.1: address map and unified memory — integration-tested in
+simulation, board smoke test passed** (see [docs/14_v0_7_1_milestone.md](docs/14_v0_7_1_milestone.md))
 
-The reset PC is a parameter; with text relocated to `0x8000_0000` the 500-seed
-pipeline regression passes (as it does at `0`). The SoC side — one block RAM
-for fetch and data, a decoder for RAM / MMIO / unmapped, a `tohost` MMIO
-register — is written but does not compile yet, so the FPGA flow on this
-branch is broken until it does; the last working FPGA build is v0.7.0.
+The reset PC is a parameter, `0x8000_0000` by default. `fpga_sys` now holds
+one block RAM with a fetch port and a data port (`sys_ram`), a decoder for
+RAM `0x8000_0000` / MMIO `0x1000_0000` / unmapped (`dmem_xbar`, sticky
+`bus_err`) and a `tohost` register at `0x1000_0100` (`mmio_regs`). The 500-seed
+pipeline regression passes with text and data in the RAM region, and the
+directed `mmap_test` (RAM lanes, MMIO isolation, unmapped access, code written
+through the data port and then executed) passes in `fpga_sys_tb` and on the
+Arty A7-100T at 25 MHz (WNS +19.5 ns, 16 RAMB36; board smoke test
+2026-10-07, passing case only).
 
 **v0.7.0: request/response instruction fetch — integration-tested in
 simulation, board smoke test passed (not tagged)**
@@ -140,6 +145,9 @@ fully green regressions — are documented in
 - [x] Directed pipeline hazard test (`hazard_test.S`: load-use, forwarding and redirect cases) with a self-checking tail
 - [x] Vivado synthesis and implementation for an Arty A7-100T (25 MHz, timing met)
 - [x] Board smoke test: the self-checking `hazard_test` reports PASS on the board LEDs
+- [x] Parameterized reset PC (`0x8000_0000`); random programs with text and data in the RAM region
+- [x] Unified RAM + address decoder (RAM / MMIO / unmapped) + `tohost` MMIO, directed `mmap_test` passing in `fpga_sys_tb`
+- [x] SoC (v0.7.1) built in Vivado and run on the board: `mmap_test` reports PASS
 - [ ] Fail-path (negative) test in simulation and on the board
 - [ ] On-board debug visibility (ILA or UART)
 - [ ] Request back-pressure stimulus
@@ -269,7 +277,8 @@ Important files:
 | `rtl/include/single_pkg.sv` | Shared SystemVerilog RV32I constants and control types |
 | `rtl/single_cycle/` | Current verified single-cycle CPU RTL |
 | `rtl/pipeline/` | Five-stage pipeline RTL: `{if,id,ex,mem,wb}_stage.sv`, `pipeline_regs.sv`, `hazard_unit.sv`, `forwarding_unit.sv`, `core_5stage.sv`, `memory/dmem_bram.sv` (see [docs/03_pipeline_design.md](docs/03_pipeline_design.md)) |
-| `rtl/fpga/rtl/` | Portable FPGA system. v0.7.1 (under development, does not compile yet): `fpga_sys.sv` (core + RAM + decoder + trap latch + pass/fail), `sys_ram.sv` (one block RAM, fetch port + data port), `dmem_xbar.sv` (RAM / MMIO / unmapped decode), `mmio_regs.sv` (`tohost`). `imem_rom.sv` is the v0.7.0 instruction ROM (request/response, synchronous read in block RAM), no longer instantiated |
+| `rtl/fpga/rtl/` | Portable FPGA system: `fpga_sys.sv` (core + RAM + decoder + trap latch + pass/fail), `sys_ram.sv` (one block RAM, fetch port + data port), `dmem_xbar.sv` (RAM / MMIO / unmapped decode), `mmio_regs.sv` (`tohost`). `imem_rom.sv` is the v0.7.0 instruction ROM, no longer instantiated |
+| `programs/fpga/asm/` | System-level test programs linked at `0x8000_0000` (`mmap_test.S`) |
 | `rtl/fpga/arty_a7/` | Arty A7-100T board wrapper (`arty_a7_top.sv`: MMCM, reset synchronizer, LED views) and pin constraints (`arty_a7.xdc`) |
 | `rtl/fpga/tb/fpga_sys_tb.sv` | VCS testbench for `fpga_sys`: backdoor program load (`+MEM=`), run to halt, verdict checks (`+EXPECT_TOHOST=`) |
 | `tb/sv/core/core_sv_tb.sv` | VCS top-level SystemVerilog harness |
@@ -348,32 +357,35 @@ make pl-build                                        # compile only
 ```
 
 Output is written under `sim/build/pipeline_vcs/` (`compile.log`, `run.log`).
-Each run first executes one directed smoke program (`+HEX=...`, default
-`load_store_width_test`), then the random seeds. The end of `run.log` holds the
+`RESET_PC` (default `0x8000_0000`) and `DATA_BASE` (default `0x8000_8000`) are
+`pipeline_tb` parameters; override them with
+`make pl-build PL_VCS_ARGS="-pvalue+pipeline_tb.RESET_PC=<decimal>"`. The end of `run.log` holds the
 regression summary, the white-box assertion table, the event counts behind each
 assertion, and the coverage lines.
 
-Build the FPGA program image and simulate the FPGA system wrapper (v0.6.0 /
-v0.7.0; on the current branch the wrapper is being reworked for v0.7.1 and this
-flow applies to commit `49b33ba`), from the repository root:
+Build the SoC test program and simulate the FPGA system wrapper (v0.7.1),
+from the repository root:
 
 ```sh
-./scripts/asm_to_hex.sh hazard_test && ./tools/rv32i_ref.py hazard_test
-mkdir -p rtl/fpga/build
+LINK_BASE=0x80000000 ASM_DIR=programs/fpga/asm HEX_DIR=rtl/fpga/build \
+    ./scripts/asm_to_hex.sh mmap_test
 awk -v N=256 'NF {print; n++} END {if (n > N) {print "too big: " n > "/dev/stderr"; exit 1} for (; n < N; n++) print "00100073"}' \
-    programs/hex/hazard_test.hex > rtl/fpga/build/hazard_test.mem
+    rtl/fpga/build/mmap_test.hex > rtl/fpga/build/mmap_test.mem
 mkdir -p sim/build/fpga_sys_vcs/csrc
 vcs -full64 -sverilog -debug_access+all -top fpga_sys_tb \
     -f tb/filelists/pipeline_rtl.f \
-    rtl/fpga/rtl/imem_rom.sv rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/fpga_sys_tb.sv \
+    rtl/fpga/rtl/sys_ram.sv rtl/fpga/rtl/dmem_xbar.sv rtl/fpga/rtl/mmio_regs.sv \
+    rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/fpga_sys_tb.sv \
     -Mdir=sim/build/fpga_sys_vcs/csrc -o sim/build/fpga_sys_vcs/simv \
     -l sim/build/fpga_sys_vcs/compile.log
-./sim/build/fpga_sys_vcs/simv +MEM=rtl/fpga/build/hazard_test.mem -l sim/build/fpga_sys_vcs/run.log
+./sim/build/fpga_sys_vcs/simv +MEM=rtl/fpga/build/mmap_test.mem +EXPECT_BUS_ERR=1 -l sim/build/fpga_sys_vcs/run.log
 ```
 
-The run ends with `FPGA_SYS PASS`. The Vivado steps (project mode,
-`xc7a100tcsg324-1`) and the LED map are in
-[docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md).
+The run ends with `FPGA_SYS PASS` (115 cycles). `mmap_test` makes an unmapped
+access on purpose, so `+EXPECT_BUS_ERR=1` is required. The v0.6.0 / v0.7.0
+`hazard_test` flow (linked at address 0, `imem_rom`) applies to commit
+`49b33ba`. The Vivado steps (project mode, `xc7a100tcsg324-1`) and the LED map
+are in [docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md).
 
 ## Repository Layout
 
@@ -456,9 +468,10 @@ Documented in detail in
 5. ~~v0.7.0 — request/response instruction fetch, so the instruction memory
    can live in block RAM.~~ **Done: integration-tested, board smoke test
    passed.**
-6. **v0.7.x — toward C:** address map and unified RAM (v0.7.1, in progress),
-   SoC test program and unmapped-access test, data in the RAM region, Spike
-   cross-check, SoC on the board. **v0.8.0** = a self-checking C program
+6. **v0.7.x — toward C:** ~~address map, unified RAM, SoC test program,
+   data in the RAM region, SoC on the board~~ **(v0.7.1: integration-tested in
+   simulation, board smoke test passed)**; next the fail path and a Spike
+   cross-check. **v0.8.0** = a self-checking C program
    (linker script + `crt0`) runs in simulation and on the board.
 7. Peripherals on a bus (UART, timer), interrupts with CSRs and trap handling,
    caches, external memory; an external ISA reference (riscv-arch-test, Spike

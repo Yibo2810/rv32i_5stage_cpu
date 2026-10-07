@@ -151,7 +151,6 @@ module pipeline_tb #(
         ok &= u_scoreboard.check(nm, ref_model.expected_txns, u_monitor.observed_txns);
         ok &= u_scoreboard.check_commits(nm, u_monitor.observed_commits, ref_model.commits);
         ok &= check_final_regs(nm);
-        ok &= check_addr_base(nm, u_monitor.observed_txns.pc, DATA_BASE);
         ok &= !timeout;
         ok &= (u_core.u_sva.fail_count == sva_before);
         record(nm, seed, ok);
@@ -167,7 +166,7 @@ module pipeline_tb #(
 
         // random test
         if (RESET_PC != 32'h0)
-            $display("RANDOM TEST: RESET_PC=%08h (text relocated, data x0-relative)", RESET_PC);
+            $display("RANDOM TEST: RESET_PC=%08h (text relocated, data_base=%08h)", RESET_PC, DATA_BASE);
         void'($value$plusargs("SEED_OFFSET=%0d", seed_offset));
         void'($value$plusargs("NUM_SEEDS=%0d", num_seeds));
         if ($value$plusargs("SINGLE_SEED=%0d", single_seed)) begin

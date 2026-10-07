@@ -171,7 +171,7 @@ module pipeline_scoreboard;
     );
         bit ok = 1'b1;
         if (addr[31:10] != data_base[31:10]) begin
-            $error("txn addr %08h outside data window %08h", data_base, addr);
+            $error("txn addr %08h outside data window %08h", addr, data_base);
             ok = 1'b0;
         end
         return ok;

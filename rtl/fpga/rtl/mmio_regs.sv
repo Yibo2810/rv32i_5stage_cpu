@@ -19,7 +19,7 @@ module mmio_regs (
     logic [9:0] word_off;                 // 4 KB = fpga_sys MMIO_AW (12): [MMIO_AW-1:2]
     assign fire     = req_valid && req_ready;
     assign word_off = req_addr[11:2];
-    localparam logic [9:0] OFF_TOHOST = 10'h000;   // 0x000 >> 2
+    localparam logic [9:0] OFF_TOHOST = 10'h040;   // 0x100 >> 2  tohost change to 0x100
     assign req_ready = 1'b1;
 
     always_ff @( posedge clk ) begin

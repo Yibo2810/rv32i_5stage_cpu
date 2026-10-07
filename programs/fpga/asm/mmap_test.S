@@ -5,7 +5,7 @@ mmap_test:
   # unmapped access in case 5).
   #
   #   RAM   0x8000_0000 64 KB  text at the bottom, data window at +0x8000
-  #   MMIO  0x1000_0000  4 KB  tohost at offset 0x000, other offsets read 0
+  #   MMIO  0x1000_0000  4 KB  tohost at offset 0x100, other offsets read 0
   #   other                    unmapped: read 0, write dropped, bus_err = 1
   #
   # Verdict: tohost = 1 then ebreak. A failing case writes
@@ -56,16 +56,16 @@ mmap_test:
   bne  t1, t2, fail
 
   # ---- case 3: an MMIO store must not reach RAM ---------------------------
-  # 0x1000_0004 and 0x8000_0004 share idx = addr[15:2] = 1. If the xbar did
+  # 0x1000_0204 and 0x8000_0204 share idx = addr[15:2] = 1. If the xbar did
   # not gate ram_req_valid by sel, the store would overwrite the 2nd
   # instruction of this program.
   li   t6, 3
-  lw   t0, 4(s3)                  # 2nd instruction word, before
+  lw   t0, 0x204(s3)              # 2nd instruction word, before
   li   t1, 0xdeadbeef
-  sw   t1, 4(s1)                  # MMIO offset 0x004: no register, dropped
-  lw   t2, 4(s3)                  # after
+  sw   t1, 0x204(s1)              # offset 0x204: no register (low offsets reserved, Spike UART at 0x1000_0000)
+  lw   t2, 0x204(s3)              # after
   bne  t0, t2, fail
-  lw   t2, 4(s1)                  # unimplemented MMIO offset reads 0
+  lw   t2, 0x204(s1)              # unimplemented MMIO offset reads 0
   bne  t2, zero, fail
 
   # ---- case 4: MMIO and RAM loads back to back, both orders ---------------
@@ -74,12 +74,12 @@ mmap_test:
   # this case catches a swapped or missing response path, not sel vs sel_q.
   li   t6, 4
   li   t2, 0xbeefa578
-  lw   t0, 0(s1)                  # tohost, still 0
-  lw   t1, 0(s0)                  # RAM
+  lw   t0, 0x100(s1)                  # tohost, still 0
+  lw   t1, 0(s0)                      # RAM
   bne  t0, zero, fail
   bne  t1, t2, fail
-  lw   t1, 0(s0)                  # RAM
-  lw   t0, 0(s1)                  # tohost
+  lw   t1, 0(s0)                      # RAM
+  lw   t0, 0x100(s1)                  # tohost
   bne  t1, t2, fail
   bne  t0, zero, fail
 
@@ -109,11 +109,11 @@ mmap_test:
 
   # ---- pass ---------------------------------------------------------------
   li   t0, 1
-  sw   t0, 0(s1)                  # tohost = 1
+  sw   t0, 0x100(s1)                  # tohost = 1
   ebreak
 
 fail:
   slli t6, t6, 1
   ori  t6, t6, 1
-  sw   t6, 0(s1)                  # tohost = (case << 1) | 1
+  sw   t6, 0x100(s1)                  # tohost = (case << 1) | 1
   ebreak
