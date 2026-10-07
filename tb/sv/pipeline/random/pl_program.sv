@@ -7,6 +7,7 @@ class pl_program;
     localparam int LOOP_K_MAX = 6;
     localparam int LOOP_PCT   = 20;
     logic [31:0] text_base = 32'h0;   // instrs[0] address = core RESET_PC; only emit_jalr uses it
+    logic [31:0] data_base = 32'h0; 
 
     function void load_imem(ref logic [31:0] imem [0:255]);
         foreach (instrs[k]) begin
@@ -21,9 +22,12 @@ class pl_program;
         this.srandom(seed);
         process::self().srandom(seed);
         instrs.delete();
-
+        instrs.push_back(mk_fixed(INSTR_LUI, 5'd22, 5'd0,  5'd0, data_base));
         if (!std::randomize(instr_count) with { instr_count inside {[20:40]}; })
             $fatal(1, "instr_count randomize failed");
+
+        if (data_base[11:0] != 0)
+            $fatal(1, "data_base fillegal");
 
         while (instrs.size() < instr_count) begin
             randcase
@@ -153,18 +157,18 @@ class pl_program;
 
         randcase
             40: begin
-                instrs.push_back(mk_fixed(INSTR_ADDI, xB, 5'd0, 5'd0, base));
+                instrs.push_back(mk_fixed(INSTR_ADDI, xB, 5'd22, 5'd0, base));
                 instrs.push_back(mk_fixed(k, rd, xB, xD, off));
             end
             30: begin
-                instrs.push_back(mk_fixed(INSTR_ADDI, xB, 5'd0, 5'd0, base));
+                instrs.push_back(mk_fixed(INSTR_ADDI, xB, 5'd22, 5'd0, base));
                 instrs.push_back(mk_fixed(INSTR_ADDI, 5'd0, 5'd0, 5'd0, 0));
                 instrs.push_back(mk_fixed(k, rd, xB, xD, off));
             end
             30: begin
-                instrs.push_back(mk_fixed(INSTR_ADDI, xT, 5'd0, 5'd0, base));
-                instrs.push_back(mk_fixed(INSTR_SW,   5'd0, 5'd0, xT, ptr));
-                instrs.push_back(mk_fixed(INSTR_LW,   xB, 5'd0, 5'd0, ptr));
+                instrs.push_back(mk_fixed(INSTR_ADDI, xT, 5'd22, 5'd0, base));
+                instrs.push_back(mk_fixed(INSTR_SW,   5'd0, 5'd22, xT, ptr));
+                instrs.push_back(mk_fixed(INSTR_LW,   xB, 5'd22, 5'd0, ptr));
                 instrs.push_back(mk_fixed(k, rd, xB, xD, off));
             end
         endcase
@@ -220,8 +224,8 @@ class pl_program;
 
         instrs.push_back(mk_fixed(INSTR_LUI,  xData, 5'd0,  5'd0,  hi_imm));
         instrs.push_back(mk_fixed(INSTR_ADDI, xData, xData, 5'd0,  lo_imm));
-        instrs.push_back(mk_fixed(st_kind,    5'd0,  5'd0,  xData, addr));
-        instrs.push_back(mk_fixed(ld_kind,    xLoad, 5'd0,  5'd0,  addr));
+        instrs.push_back(mk_fixed(st_kind,    5'd0,  5'd22,  xData, addr));
+        instrs.push_back(mk_fixed(ld_kind,    xLoad, 5'd22,  5'd0,  addr));
     endfunction
 
     function automatic void emit_fwd_branch(instr_kind_e br, bit taken, int unsigned M, logic [1:0] prelude);
@@ -243,13 +247,13 @@ class pl_program;
         end else if (prelude == 2'b01) begin
             instrs.push_back(mk_fixed(INSTR_ADDI, S1, 5'd0, 5'd0, a));
             instrs.push_back(mk_fixed(INSTR_ADDI, S2, 5'd0, 5'd0, b));
-            instrs.push_back(mk_fixed(INSTR_SB, 5'd0, 5'd0, 5'd0, 32));
+            instrs.push_back(mk_fixed(INSTR_SB, 5'd0, 5'd22, 5'd0, 32));
             instrs.push_back(mk_fixed(br, 5'd0, S1, S2, br_off));
         end else if (prelude == 2'b10) begin
             instrs.push_back(mk_fixed(INSTR_ADDI, S1, 5'd0, 5'd0, a));
-            instrs.push_back(mk_fixed(INSTR_SW, 5'd0, 5'd0, S1, 128));
+            instrs.push_back(mk_fixed(INSTR_SW, 5'd0, 5'd22, S1, 128));
             instrs.push_back(mk_fixed(INSTR_ADDI, S2, 5'd0, 5'd0, b));
-            instrs.push_back(mk_fixed(INSTR_LW, S1, 5'd0, 5'd0, 128));
+            instrs.push_back(mk_fixed(INSTR_LW, S1, 5'd22, 5'd0, 128));
             instrs.push_back(mk_fixed(br, 5'd0, S1, S2, br_off));
         end else begin 
             instrs.push_back(mk_fixed(INSTR_ADDI, S2, 5'd0, 5'd0, b));
@@ -287,8 +291,8 @@ class pl_program;
                 instrs.push_back(mk_fixed(INSTR_ADDI, xT, xT,   5'd0, abs));
             end else
                 instrs.push_back(mk_fixed(INSTR_ADDI, xT,   5'd0, 5'd0, abs));
-                instrs.push_back(mk_fixed(INSTR_SW, 5'd0, 5'd0, xT, 64));
-                instrs.push_back(mk_fixed(INSTR_LW, xS, 5'd0, 5'd0, 64));
+                instrs.push_back(mk_fixed(INSTR_SW, 5'd0, 5'd22, xT, 64));
+                instrs.push_back(mk_fixed(INSTR_LW, xS, 5'd22, 5'd0, 64));
                 instrs.push_back(mk_fixed(INSTR_JALR, 5'd1, xS,   5'd0, 0));
         end 
         for (int j = 0; j < M; j++) push_straightline();

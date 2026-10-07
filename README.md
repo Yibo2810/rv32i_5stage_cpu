@@ -3,10 +3,14 @@
 A learning-oriented RV32I CPU project implemented in Verilog and
 SystemVerilog.
 
-The project has completed its **v0.6.0 milestone: the pipeline running on an
-FPGA board**. On a Digilent Arty A7-100T at 25 MHz, a directed hazard program
-with a self-checking tail runs on the core and reports PASS on the board LEDs
-(board smoke test, passing case only). See
+**Current: v0.7.1, in progress** — reset PC at `0x8000_0000`, one RAM behind
+an address map (RAM / MMIO). `v0.7.x` are the steps toward running C programs;
+`v0.8.0` will mark a self-checking C program running on the SoC in simulation
+and on the board. See [docs/14_v0_7_1_milestone.md](docs/14_v0_7_1_milestone.md).
+
+The pipeline has run on an FPGA board since **v0.6.0**: on a Digilent Arty
+A7-100T at 25 MHz, a directed hazard program with a self-checking tail reports
+PASS on the board LEDs (board smoke test, passing case only). See
 [docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md).
 
 The core is the **v0.5.0 five-stage pipeline, verified in simulation**, and
@@ -26,7 +30,17 @@ baseline, and its regression still passes on the current tree.
 
 ## Current Milestone
 
-**In progress: v0.7.0 request/response instruction fetch**
+**In progress: v0.7.1 address map and unified memory**
+(see [docs/14_v0_7_1_milestone.md](docs/14_v0_7_1_milestone.md))
+
+The reset PC is a parameter; with text relocated to `0x8000_0000` the 500-seed
+pipeline regression passes (as it does at `0`). The SoC side — one block RAM
+for fetch and data, a decoder for RAM / MMIO / unmapped, a `tohost` MMIO
+register — is written but does not compile yet, so the FPGA flow on this
+branch is broken until it does; the last working FPGA build is v0.7.0.
+
+**v0.7.0: request/response instruction fetch — integration-tested in
+simulation, board smoke test passed (not tagged)**
 (see [docs/13_v0_7_0_milestone.md](docs/13_v0_7_0_milestone.md))
 
 The IF stage now fetches through a single-outstanding request/response
@@ -255,8 +269,7 @@ Important files:
 | `rtl/include/single_pkg.sv` | Shared SystemVerilog RV32I constants and control types |
 | `rtl/single_cycle/` | Current verified single-cycle CPU RTL |
 | `rtl/pipeline/` | Five-stage pipeline RTL: `{if,id,ex,mem,wb}_stage.sv`, `pipeline_regs.sv`, `hazard_unit.sv`, `forwarding_unit.sv`, `core_5stage.sv`, `memory/dmem_bram.sv` (see [docs/03_pipeline_design.md](docs/03_pipeline_design.md)) |
-| `rtl/fpga/rtl/` | Portable FPGA system: `imem_rom.sv` (instruction ROM, request/response, synchronous read in block RAM) and `fpga_sys.sv` (core + memories + trap latch + `tohost` observer + pass/fail) |
-| `rtl/fpga/vivado_notes/` | Vivado notes (Chinese): synthesis-log review, memory inference, utilization, timing-report reading, Fmax method, netlist simulation, Tcl, run history |
+| `rtl/fpga/rtl/` | Portable FPGA system. v0.7.1 (under development, does not compile yet): `fpga_sys.sv` (core + RAM + decoder + trap latch + pass/fail), `sys_ram.sv` (one block RAM, fetch port + data port), `dmem_xbar.sv` (RAM / MMIO / unmapped decode), `mmio_regs.sv` (`tohost`). `imem_rom.sv` is the v0.7.0 instruction ROM (request/response, synchronous read in block RAM), no longer instantiated |
 | `rtl/fpga/arty_a7/` | Arty A7-100T board wrapper (`arty_a7_top.sv`: MMCM, reset synchronizer, LED views) and pin constraints (`arty_a7.xdc`) |
 | `rtl/fpga/tb/fpga_sys_tb.sv` | VCS testbench for `fpga_sys`: backdoor program load (`+MEM=`), run to halt, verdict checks (`+EXPECT_TOHOST=`) |
 | `tb/sv/core/core_sv_tb.sv` | VCS top-level SystemVerilog harness |
@@ -340,8 +353,9 @@ Each run first executes one directed smoke program (`+HEX=...`, default
 regression summary, the white-box assertion table, the event counts behind each
 assertion, and the coverage lines.
 
-Build the FPGA program image and simulate the FPGA system wrapper (v0.6.0),
-from the repository root:
+Build the FPGA program image and simulate the FPGA system wrapper (v0.6.0 /
+v0.7.0; on the current branch the wrapper is being reworked for v0.7.1 and this
+flow applies to commit `49b33ba`), from the repository root:
 
 ```sh
 ./scripts/asm_to_hex.sh hazard_test && ./tools/rv32i_ref.py hazard_test
@@ -415,10 +429,8 @@ Documented in detail in
   architectural simulator.
 - On hardware, only one directed self-checking program has run (v0.6.0), and
   only its passing case; the random regression runs in simulation only.
-  Instruction fetch is a same-cycle combinational read, so the instruction
-  memory is a ROM in LUTs, not block RAM. FPGA-specific limitations (no
-  negative test yet, no on-board debug visibility, GUI-only Vivado build) are
-  listed in [docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md).
+  FPGA-specific limitations (no negative test yet, no on-board debug
+  visibility, GUI-only Vivado build) are listed in [docs/12_v0_6_0_milestone.md](docs/12_v0_6_0_milestone.md).
 - The pipeline's data memory is single-outstanding with a 2-cycle cost per
   load/store against a 1-cycle BRAM; the testbench memory never applies
   back-pressure.
@@ -441,8 +453,13 @@ Documented in detail in
    synchronization, pass/fail on LEDs.~~ **Done (v0.6.0): board smoke test
    passed on an Arty A7-100T.** Still open: the fail-path test, on-board debug
    visibility (ILA or UART), a scripted Vivado build.
-5. **v0.7.0 — request/response instruction fetch**, so the instruction memory
-   can live in block RAM, plus a data memory model with back-pressure.
-6. Peripherals on a bus (UART, timer), interrupts with CSRs and trap handling,
+5. ~~v0.7.0 — request/response instruction fetch, so the instruction memory
+   can live in block RAM.~~ **Done: integration-tested, board smoke test
+   passed.**
+6. **v0.7.x — toward C:** address map and unified RAM (v0.7.1, in progress),
+   SoC test program and unmapped-access test, data in the RAM region, Spike
+   cross-check, SoC on the board. **v0.8.0** = a self-checking C program
+   (linker script + `crt0`) runs in simulation and on the board.
+7. Peripherals on a bus (UART, timer), interrupts with CSRs and trap handling,
    caches, external memory; an external ISA reference (riscv-arch-test, Spike
    or Sail).

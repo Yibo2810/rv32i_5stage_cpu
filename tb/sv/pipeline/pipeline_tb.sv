@@ -1,7 +1,8 @@
 `timescale 1ns/1ps
 
 module pipeline_tb #(
-    parameter logic [31:0] RESET_PC = 32'h0000_0000
+    parameter logic [31:0] RESET_PC = 32'h8000_0000,
+    parameter logic [31:0] DATA_BASE = 32'h8000_8000
 );
     import single_pkg::*;
     import pipeline_verif_pkg::*;
@@ -121,6 +122,7 @@ module pipeline_tb #(
         bit ok = 1'b1;
         int unsigned sva_before = u_core.u_sva.fail_count;
 
+        p.data_base = DATA_BASE;
         p.text_base = RESET_PC;
         p.build(seed);
         u_memory.clear_dmem();
@@ -141,11 +143,15 @@ module pipeline_tb #(
         total_retired += ref_model.retired;
         total_txns += ref_model.expected_txns.size();
         total_static += p.instrs.size();
-
+        
+        foreach (u_monitor.observed_txns[i]) begin
+            ok &= u_scoreboard.check_addr_base(nm, u_monitor.observed_txns[i].addr, DATA_BASE);
+        end
         ok &= u_scoreboard.check_retire(nm, u_monitor.observed_commits.size(), ref_model.retired, u_monitor.trap_pc_q, ref_model.final_pc);
         ok &= u_scoreboard.check(nm, ref_model.expected_txns, u_monitor.observed_txns);
         ok &= u_scoreboard.check_commits(nm, u_monitor.observed_commits, ref_model.commits);
         ok &= check_final_regs(nm);
+        ok &= check_addr_base(nm, u_monitor.observed_txns.pc, DATA_BASE);
         ok &= !timeout;
         ok &= (u_core.u_sva.fail_count == sva_before);
         record(nm, seed, ok);

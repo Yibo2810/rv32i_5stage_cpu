@@ -22,7 +22,8 @@ import single_pkg::*;
     output logic pass,
     output logic fail,
     output logic mark_seen,
-    output logic error_trap
+    output logic error_trap,
+    output logic bus_err
 );
     localparam int RAM_WORDS = 1 << (RAM_AW - 2);   // sys_ram depth = RAM region size / 4
 
@@ -45,9 +46,36 @@ import single_pkg::*;
     logic        dmem_rsp_ready;
     logic        dmem_rsp_valid;
 
+    // MMIO
+    logic        mmio_req_ready;
+    logic        mmio_req_valid;
+    logic        mmio_req_write;
+    logic [31:0] mmio_req_addr;
+    logic [31:0] mmio_req_wdata;
+    logic [3:0]  mmio_req_wstrb;
+
+    logic [31:0] mmio_rsp_rdata;
+    logic        mmio_rsp_ready;
+    logic        mmio_rsp_valid;
+
+    // RAM
+    logic        ram_req_ready;
+    logic        ram_req_valid;
+    logic        ram_req_write;
+    logic [31:0] ram_req_addr;
+    logic [31:0] ram_req_wdata;
+    logic [3:0]  ram_req_wstrb;
+
+    logic [31:0] ram_rsp_rdata;
+    logic        ram_rsp_ready;
+    logic        ram_rsp_valid;
+    // Trap
     logic        trap_valid;
     exc_cause_e  trap_cause;
     logic [31:0] trap_pc;
+
+    // ERROR
+    logic        dmem_rsp_err;
     assign error_trap = halted && trap_cause_q != EXC_BREAKPOINT;
     always_ff @( posedge clk ) begin
         if (rst) begin
@@ -114,5 +142,55 @@ import single_pkg::*;
         .imem_rsp_valid(imem_rsp_valid),
         .imem_rsp_ready(imem_rsp_ready),
         .imem_rsp_rdata(imem_rsp_rdata)
+    );
+
+    dmem_xbar #(.RAM_BASE(RAM_BASE), .RAM_AW(RAM_AW), .MMIO_BASE(MMIO_BASE), .MMIO_AW(MMIO_AW)) u_xbar(
+        .clk      (clk),
+        .rst      (rst),
+        .ram_req_valid(ram_req_valid),
+        .ram_req_ready(ram_req_ready),
+        .ram_req_write(ram_req_write),
+        .ram_req_addr (ram_req_addr),
+        .ram_req_wdata(ram_req_wdata),
+        .ram_req_wstrb(ram_req_wstrb),
+        .ram_rsp_valid(ram_rsp_valid),
+        .ram_rsp_ready(ram_rsp_ready),
+        .ram_rsp_rdata(ram_rsp_rdata),
+        .dmem_req_valid(dmem_req_valid),
+        .dmem_req_ready(dmem_req_ready),
+        .dmem_req_write(dmem_req_write),
+        .dmem_req_addr (dmem_req_addr),
+        .dmem_req_wdata(dmem_req_wdata),
+        .dmem_req_wstrb(dmem_req_wstrb),
+        .dmem_rsp_valid(dmem_rsp_valid),
+        .dmem_rsp_ready(dmem_rsp_ready),
+        .dmem_rsp_rdata(dmem_rsp_rdata),
+        .mmio_req_valid(mmio_req_valid),
+        .mmio_req_ready(mmio_req_ready),
+        .mmio_req_write(mmio_req_write),
+        .mmio_req_addr (mmio_req_addr),
+        .mmio_req_wdata(mmio_req_wdata),
+        .mmio_req_wstrb(mmio_req_wstrb),
+        .mmio_rsp_valid(mmio_rsp_valid),
+        .mmio_rsp_ready(mmio_rsp_ready),
+        .mmio_rsp_rdata(mmio_rsp_rdata),
+        .bus_err(bus_err),
+        .dmem_rsp_err(dmem_rsp_err)
+    );
+
+    mmio_regs u_mmio (
+        .clk        (clk),
+        .rst        (rst),
+        .req_valid  (mmio_req_valid),
+        .req_ready  (mmio_req_ready),
+        .req_write  (mmio_req_write),
+        .req_addr   (mmio_req_addr),
+        .req_wdata  (mmio_req_wdata),
+        .req_wstrb  (mmio_req_wstrb),
+        .rsp_valid  (mmio_rsp_valid),
+        .rsp_ready  (mmio_rsp_ready),
+        .rsp_rdata  (mmio_rsp_rdata),
+        .tohost     (tohost),
+        .tohost_seen(tohost_seen)
     );
     endmodule

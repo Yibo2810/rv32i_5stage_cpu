@@ -10,7 +10,7 @@ class pl_instr;
         rs2 inside {[0:31]};
     }
 
-    constraint reserve_counter_c { rd != 5'd31; }
+    constraint reserve_counter_c { rd != 5'd31; rd != 5'd22;}
 
     constraint supported_kind_c {
         kind inside {
@@ -24,7 +24,7 @@ class pl_instr;
     constraint mem_safe_c {
         (kind inside {INSTR_LB, INSTR_LH, INSTR_LW, INSTR_LBU, INSTR_LHU, INSTR_SB, INSTR_SH,
         INSTR_SW}) -> {
-            rs1 == 5'd0;
+            rs1 == 5'd22;
             imm32 inside {[0:508]};
         }
 

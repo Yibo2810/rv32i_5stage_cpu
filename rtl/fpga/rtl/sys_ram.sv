@@ -54,7 +54,7 @@ module sys_ram #(
         end
         if (imem_req_fire) begin
             imem_rsp_valid <= 1'b1;
-            imem_rsp_rdata <= mem[idx];
+            imem_rsp_rdata <= mem[i_idx];
         end
         end
     end
@@ -70,9 +70,9 @@ module sys_ram #(
     always @(posedge clk) begin
         if (fire && req_write)
         for (int b = 0; b < 4; b++)
-            if (req_wstrb[b]) mem[idx][8*b +: 8] <= req_wdata[8*b +: 8];
+            if (req_wstrb[b]) mem[d_idx][8*b +: 8] <= req_wdata[8*b +: 8];
         if (fire && !req_write)
-        rsp_rdata <= mem[idx];
+        rsp_rdata <= mem[d_idx];
     end
 
     always_ff @(posedge clk) begin

@@ -4,7 +4,7 @@ module fpga_sys_tb;
     import single_pkg::*;
 
     localparam int unsigned MAX_CYCLES  = 10_000;
-    localparam string       DEFAULT_MEM = "rtl/fpga/build/hazard_test.mem";
+    localparam string       DEFAULT_MEM = "rtl/fpga/build/mmap_test.mem";
 
     logic clk = 1'b0;
     logic rst = 1'b1;
@@ -19,10 +19,12 @@ module fpga_sys_tb;
     logic        fail;
     logic        mark_seen;
     logic        error_trap;
+    logic        bus_err;
 
     // ---- TB variables
     string       mem;
     logic [31:0] expect_tohost;
+    bit          expect_bus_err;   // 0: the program must not touch unmapped space
     int unsigned cycles;
     bit          timeout;
     int unsigned errors = 0;
@@ -38,7 +40,7 @@ module fpga_sys_tb;
         fd = $fopen(path, "r");
         if (fd == 0) $fatal(1, "cannot open %s (run simv from the repo root)", path);
         $fclose(fd);
-        $readmemh(path, u_sys.u_imem.rom);
+        $readmemh(path, u_sys.u_ram.mem);
     endtask
 
     task automatic run_until_halt(
@@ -64,8 +66,9 @@ module fpga_sys_tb;
     endfunction
 
     initial begin
-        if (!$value$plusargs("MEM=%s", mem))                     mem           = DEFAULT_MEM;
+        if (!$value$plusargs("MEM=%s", mem)) mem = DEFAULT_MEM;
         if (!$value$plusargs("EXPECT_TOHOST=%h", expect_tohost)) expect_tohost = 32'h1;
+        if (!$value$plusargs("EXPECT_BUS_ERR=%d", expect_bus_err)) expect_bus_err = 1'b0;
 
         @(negedge clk);
         load_program(mem);
@@ -77,6 +80,7 @@ module fpga_sys_tb;
                  cycles, timeout, halted, trap_cause_q.name(), trap_pc_q);
         $display("SUMMARY tohost_seen=%0d tohost=%08h pass=%0d fail=%0d error_trap=%0d mark_seen=%0d",
                  tohost_seen, tohost, pass, fail, error_trap, mark_seen);
+        $display("SUMMARY bus_err=%0d expect_bus_err=%0d", bus_err, expect_bus_err);
         if (timeout)
             $display("TIMEOUT: PC = %08h", u_sys.u_core.imem_req_addr);   // hierarchical peek, no net needed
 
@@ -85,6 +89,7 @@ module fpga_sys_tb;
         if (!mark_seen) report("mark_seen");
         if (tohost != expect_tohost) report("tohost");
         if (pass != (expect_tohost == 1)) report("pass");
+        if (bus_err != expect_bus_err) report("bus_err");
         if (errors == 0) begin
             $display("FPGA_SYS PASS");
             $finish;
@@ -104,6 +109,7 @@ module fpga_sys_tb;
         .pass        (pass),
         .fail        (fail),
         .mark_seen   (mark_seen),
-        .error_trap  (error_trap)
+        .error_trap  (error_trap),
+        .bus_err     (bus_err)
     );
 endmodule

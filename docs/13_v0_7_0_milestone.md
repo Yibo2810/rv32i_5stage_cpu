@@ -33,6 +33,7 @@ memory that stalls at random.
 **Status: in progress — integration-tested in simulation; board smoke test
 passed on 2026-10-03 with the instruction ROM in block RAM (§10).** One
 directed program, passing case only; not tagged.
+Follow-up work continues as v0.7.x: [14_v0_7_1_milestone.md](14_v0_7_1_milestone.md).
 
 ---
 
@@ -404,6 +405,3 @@ v0.6.0 for reference: 1750 LUT, 1641 FF, WNS +21.925 ns, worst path
 `rom_style` is a synthesis attribute that VCS ignores, so `fpga_sys_tb` cannot
 tell the two builds apart. The block-RAM build is verified by the board run
 only. The 9 extra cycles against v0.6.0 have not been broken down.
-
-Vivado procedures, report reading and the full numbers of both runs:
-[rtl/fpga/vivado_notes/](../rtl/fpga/vivado_notes/README.md).

@@ -55,7 +55,6 @@ module dmem_xbar #(
     
     //unmapped
     logic unm_req_valid;
-    logic unm_rsp_ready;
     logic unm_rsp_valid;
 
     typedef enum logic [1:0] {SEL_UNMAPPED, SEL_RAM, SEL_MMIO} sel_e;
@@ -77,14 +76,15 @@ module dmem_xbar #(
     assign dmem_rsp_err = dmem_rsp_valid && (sel_q == SEL_UNMAPPED);
 
     always_ff @(posedge clk) begin
-        unm_rsp_valid <= (dmem_rsp_ready) && (sel == SEL_UNMAPPED);
-        bus_err <= (dmem_rsp_ready) && (sel == SEL_UNMAPPED);
+        unm_rsp_valid <= dmem_req_ready && unm_req_valid;
         if (rst) begin
             sel_q <= SEL_UNMAPPED;
             bus_err <= 1'b0;
+            unm_rsp_valid <= 1'b0;
         end
-        else if (dmem_req_valid && dmem_req_ready) begin
-            sel_q <= sel;
+        else begin 
+            if (dmem_req_valid && dmem_req_ready) sel_q <= sel;
+            if (unm_req_valid && dmem_req_ready) bus_err <= 1'b1;
         end
     end
     // A misaligned base would silently decode as the aligned one below it.
@@ -117,11 +117,11 @@ module dmem_xbar #(
                 dmem_rsp_rdata = mmio_rsp_rdata;
             end
             SEL_UNMAPPED: begin
-                dmem_rsp_valid = 1'b1;
+                dmem_rsp_valid = unm_rsp_valid;
+                
                 dmem_rsp_rdata = 32'b0;
             end
             default: begin
-                dmem_rsp_valid = unm_rsp_valid;
                 dmem_rsp_rdata = 32'b0;
             end
         endcase

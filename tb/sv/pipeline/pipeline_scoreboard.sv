@@ -164,4 +164,16 @@ module pipeline_scoreboard;
         ((dut.rd_we == 1'b0) || ((dut.rd_we == 1'b1) && (dut.rd_addr === iss.rd_addr) && (dut.rd_data === iss.rd_data)));
     endfunction
 
+    function automatic bit check_addr_base(
+        input string name,
+        input logic [31:0] addr,
+        input logic [31:0] data_base
+    );
+        bit ok = 1'b1;
+        if (addr[31:10] != data_base[31:10]) begin
+            $error("txn addr %08h outside data window %08h", data_base, addr);
+            ok = 1'b0;
+        end
+        return ok;
+    endfunction
 endmodule
