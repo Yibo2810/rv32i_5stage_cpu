@@ -1,5 +1,6 @@
 .PHONY: build run cov-build cov-run cov-report cov-report-md urg-report cov \
-        pl-run pl-cov-report clean-artifacts clean distclean
+        pl-run pl-cov-report clean-artifacts clean distclean \
+        fs-build c-run c-spike
 
 BUILD_DIR := sim/build/core_vcs
 SIMV      := $(BUILD_DIR)/simv
@@ -106,3 +107,30 @@ pl-run: pl-build
 pl-cov-report:
 	python3 scripts/cov_report.py -dir $(PL_COV_DIR) -report $(PL_COV_RPT) \
 	  -format text $(COV_ARGS)
+
+# ---- FPGA system testbench and bare-metal C (sw/Makefile builds the image) ----
+#   make c-run PROG=hello      C program on fpga_sys_tb
+#   make c-spike PROG=hello    same sources on Spike
+FS_BUILD_DIR := sim/build/fpga_sys_vcs
+FS_SIMV      := $(FS_BUILD_DIR)/simv
+PROG         ?= hello
+
+fs-build:
+	@mkdir -p $(FS_BUILD_DIR)/csrc
+	vcs -full64 \
+	-sverilog \
+	-debug_access+all \
+	-top fpga_sys_tb \
+	-f tb/filelists/pipeline_rtl.f \
+	rtl/fpga/rtl/sys_ram.sv rtl/fpga/rtl/dmem_xbar.sv rtl/fpga/rtl/mmio_regs.sv \
+	rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/fpga_sys_tb.sv \
+	-Mdir=$(FS_BUILD_DIR)/csrc \
+	-o $(FS_SIMV) \
+	-l $(FS_BUILD_DIR)/compile.log
+
+c-run: fs-build
+	$(MAKE) -C sw PROG=$(PROG)
+	./$(FS_SIMV) +MEM=rtl/fpga/build/$(PROG).mem $(ARGS) -l $(FS_BUILD_DIR)/run.log
+
+c-spike:
+	$(MAKE) -C sw PROG=$(PROG) spike

@@ -8,7 +8,7 @@ import single_pkg::*;
     parameter int          RAM_AW    = 16,              // RAM = 2**16 B = 64 KB
     parameter logic [31:0] MMIO_BASE = 32'h1000_0000,
     parameter int          MMIO_AW   = 12,              // MMIO = 4 KB, see mmio_regs word_off
-    parameter string       RAM_INIT  = "mmap_test.mem"
+    parameter string       RAM_INIT  = "hello.mem"
 ) (
     input logic clk,
     input logic rst,
