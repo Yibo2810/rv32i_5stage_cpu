@@ -8,7 +8,8 @@ import single_pkg::*;
     parameter int          RAM_AW    = 16,              // RAM = 2**16 B = 64 KB
     parameter logic [31:0] MMIO_BASE = 32'h1000_0000,
     parameter int          MMIO_AW   = 12,              // MMIO = 4 KB, see mmio_regs word_off
-    parameter string       RAM_INIT  = "hello.mem"
+    parameter string       RAM_INIT  = "uart_hello.mem",
+    parameter int          UART_CLKS_PER_BIT = 217
 ) (
     input logic clk,
     input logic rst,
@@ -23,7 +24,8 @@ import single_pkg::*;
     output logic fail,
     output logic mark_seen,
     output logic error_trap,
-    output logic bus_err
+    output logic bus_err,
+    output logic uart_txd
 );
     localparam int RAM_WORDS = 1 << (RAM_AW - 2);   // sys_ram depth = RAM region size / 4
 
@@ -178,7 +180,7 @@ import single_pkg::*;
         .dmem_rsp_err(dmem_rsp_err)
     );
 
-    mmio_regs u_mmio (
+    mmio_regs #(.CLKS_PER_BIT(UART_CLKS_PER_BIT)) u_mmio (
         .clk        (clk),
         .rst        (rst),
         .req_valid  (mmio_req_valid),
@@ -191,6 +193,7 @@ import single_pkg::*;
         .rsp_ready  (mmio_rsp_ready),
         .rsp_rdata  (mmio_rsp_rdata),
         .tohost     (tohost),
-        .tohost_seen(tohost_seen)
+        .tohost_seen(tohost_seen),
+        .uart_txd   (uart_txd)
     );
     endmodule

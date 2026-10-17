@@ -1,17 +1,22 @@
-# Bare-metal C for fpga_sys: sw/<PROG>/*.c + sw/common -> ELF -> bin -> hex -> .mem
+# Bare-metal C for fpga_sys: sw/programs/<PROG>/*.c + sw/common -> ELF -> bin -> hex -> .mem
+#
+#   sw/common/rt/   crt0.S, link.ld, lib.c, tohost_spike.S   (start-up + layout)
+#   sw/common/drv/  platform.h + device drivers (uart)         (only place with addresses)
+#   sw/common/lib/  print                                      (pure C on top of drv)
 #
 #   make PROG=hello          rtl/fpga/build/hello.mem (padded to MEM_WORDS)
 #   make PROG=hello spike    same sources on Spike; exit code = main() return value
 #   make PROG=hello clean
 #
-# The board and Spike builds differ only in where tohost lives (see link.ld).
+# The board and Spike builds differ in where tohost lives (see link.ld) and in the
+# UART register layout (PLATFORM_SPIKE, see drv/platform.h).
 
 PROG      ?= hello
 MEM_WORDS ?= 1024
 
 ROOT   := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 COMMON := $(ROOT)/sw/common
-SRC    := $(ROOT)/sw/$(PROG)
+SRC    := $(ROOT)/sw/programs/$(PROG)
 BUILD  ?= $(ROOT)/rtl/fpga/build
 
 CROSS   ?= riscv64-unknown-elf-
@@ -22,11 +27,12 @@ NM      := $(CROSS)nm
 SIZE    := $(CROSS)size
 SPIKE   ?= spike
 
-CFLAGS  := -march=rv32i -mabi=ilp32 -O2 -ffreestanding -nostdlib -Wall
-LDFLAGS := -T $(COMMON)/link.ld -Wl,--no-warn-rwx-segments
+CFLAGS  := -march=rv32i -mabi=ilp32 -O2 -ffreestanding -nostdlib -Wall -I$(COMMON)
+LDFLAGS := -T $(COMMON)/rt/link.ld -Wl,--no-warn-rwx-segments
 
-SRCS := $(COMMON)/crt0.S $(wildcard $(SRC)/*.c) $(COMMON)/lib.c
-DEPS := $(SRCS) $(COMMON)/link.ld
+SRCS := $(COMMON)/rt/crt0.S $(wildcard $(SRC)/*.c) $(COMMON)/rt/lib.c \
+        $(COMMON)/drv/uart.c $(COMMON)/lib/print.c
+DEPS := $(SRCS) $(COMMON)/rt/link.ld $(wildcard $(COMMON)/*/*.h $(SRC)/*.h)
 
 ELF       := $(BUILD)/$(PROG).elf
 MEM       := $(BUILD)/$(PROG).mem
@@ -53,8 +59,9 @@ endef
 $(ELF): $(DEPS) | $(BUILD)
 	$(call link_and_check,$(SRCS))
 
-$(SPIKE_ELF): $(DEPS) $(COMMON)/tohost_spike.S | $(BUILD)
-	$(call link_and_check,$(SRCS) $(COMMON)/tohost_spike.S)
+$(SPIKE_ELF): CFLAGS += -DPLATFORM_SPIKE
+$(SPIKE_ELF): $(DEPS) $(COMMON)/rt/tohost_spike.S | $(BUILD)
+	$(call link_and_check,$(SRCS) $(COMMON)/rt/tohost_spike.S)
 
 %.bin: %.elf
 	$(OBJCOPY) -O binary $< $@

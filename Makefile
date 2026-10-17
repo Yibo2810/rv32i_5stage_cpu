@@ -1,6 +1,6 @@
 .PHONY: build run cov-build cov-run cov-report cov-report-md urg-report cov \
         pl-run pl-cov-report clean-artifacts clean distclean \
-        fs-build c-run c-spike
+        fs-build c-run c-spike uart-tx-test
 
 BUILD_DIR := sim/build/core_vcs
 SIMV      := $(BUILD_DIR)/simv
@@ -123,14 +123,29 @@ fs-build:
 	-top fpga_sys_tb \
 	-f tb/filelists/pipeline_rtl.f \
 	rtl/fpga/rtl/sys_ram.sv rtl/fpga/rtl/dmem_xbar.sv rtl/fpga/rtl/mmio_regs.sv \
-	rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/fpga_sys_tb.sv \
+	rtl/fpga/rtl/uart_tx.sv rtl/fpga/rtl/uart_16550.sv \
+	rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/uart_rx_model.sv rtl/fpga/tb/fpga_sys_tb.sv \
 	-Mdir=$(FS_BUILD_DIR)/csrc \
 	-o $(FS_SIMV) \
 	-l $(FS_BUILD_DIR)/compile.log
 
+# sw/programs/<PROG>/expect_uart.txt, if present, is the exact expected UART output.
+UART_EXPECT = $(wildcard sw/programs/$(PROG)/expect_uart.txt)
+MAX_CYCLES ?= 200000
+
 c-run: fs-build
 	$(MAKE) -C sw PROG=$(PROG)
-	./$(FS_SIMV) +MEM=rtl/fpga/build/$(PROG).mem $(ARGS) -l $(FS_BUILD_DIR)/run.log
+	./$(FS_SIMV) +MEM=rtl/fpga/build/$(PROG).mem +MAX_CYCLES=$(MAX_CYCLES) \
+	$(if $(UART_EXPECT),+EXPECT_UART_FILE=$(UART_EXPECT)) $(ARGS) -l $(FS_BUILD_DIR)/run.log
 
 c-spike:
 	$(MAKE) -C sw PROG=$(PROG) spike
+
+# uart_tx unit test against the independent TB receiver model
+uart-tx-test:
+	@mkdir -p sim/build/uart_tx_vcs/csrc
+	vcs -full64 -sverilog -debug_access+all -top uart_tx_tb \
+	rtl/fpga/rtl/uart_tx.sv rtl/fpga/tb/uart_rx_model.sv rtl/fpga/tb/uart_tx_tb.sv \
+	-Mdir=sim/build/uart_tx_vcs/csrc -o sim/build/uart_tx_vcs/simv \
+	-l sim/build/uart_tx_vcs/compile.log
+	./sim/build/uart_tx_vcs/simv -l sim/build/uart_tx_vcs/run.log

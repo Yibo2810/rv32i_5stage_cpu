@@ -3,6 +3,7 @@ module arty_a7_top (
     input logic reset_n,
     input logic [1:0] sw,
     output logic [3:0] led,
+    output logic uart_rxd_out,
 
     output logic led0_r,
     output logic led0_g,
@@ -147,6 +148,7 @@ module arty_a7_top (
         .fail(fail),
         .mark_seen(mark_seen),
         .error_trap(error_trap),
-        .bus_err(bus_err)
+        .bus_err(bus_err),
+        .uart_txd(uart_rxd_out)
     );
 endmodule
