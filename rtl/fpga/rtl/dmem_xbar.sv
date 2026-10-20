@@ -50,7 +50,8 @@ module dmem_xbar #(
     input   logic        mmio_rsp_valid,
 
     //err
-    output  logic        bus_err
+    output  logic        bus_err,
+    output  logic [31:0] bus_err_addr
 );
     
     //unmapped
@@ -81,10 +82,12 @@ module dmem_xbar #(
             sel_q <= SEL_UNMAPPED;
             bus_err <= 1'b0;
             unm_rsp_valid <= 1'b0;
+            bus_err_addr <= 32'b0;
         end
         else begin 
             if (dmem_req_valid && dmem_req_ready) sel_q <= sel;
             if (unm_req_valid && dmem_req_ready) bus_err <= 1'b1;
+            if (unm_req_valid && dmem_req_ready && !bus_err) bus_err_addr <= dmem_req_addr;
         end
     end
     // A misaligned base would silently decode as the aligned one below it.

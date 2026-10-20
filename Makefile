@@ -1,6 +1,6 @@
 .PHONY: build run cov-build cov-run cov-report cov-report-md urg-report cov \
         pl-run pl-cov-report clean-artifacts clean distclean \
-        fs-build c-run c-spike uart-tx-test
+        fs-build c-run c-spike uart-tx-test oled-spi-test
 
 BUILD_DIR := sim/build/core_vcs
 SIMV      := $(BUILD_DIR)/simv
@@ -123,8 +123,8 @@ fs-build:
 	-top fpga_sys_tb \
 	-f tb/filelists/pipeline_rtl.f \
 	rtl/fpga/rtl/sys_ram.sv rtl/fpga/rtl/dmem_xbar.sv rtl/fpga/rtl/mmio_regs.sv \
-	rtl/fpga/rtl/uart_tx.sv rtl/fpga/rtl/uart_16550.sv \
-	rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/uart_rx_model.sv rtl/fpga/tb/fpga_sys_tb.sv \
+	rtl/fpga/rtl/uart/uart_tx.sv rtl/fpga/rtl/uart/uart_16550.sv rtl/fpga/rtl/halt_reporter.sv \
+	rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/uart/uart_rx_model.sv rtl/fpga/tb/fpga_sys_tb.sv \
 	-Mdir=$(FS_BUILD_DIR)/csrc \
 	-o $(FS_SIMV) \
 	-l $(FS_BUILD_DIR)/compile.log
@@ -142,10 +142,18 @@ c-spike:
 	$(MAKE) -C sw PROG=$(PROG) spike
 
 # uart_tx unit test against the independent TB receiver model
+oled-spi-test:
+	@mkdir -p sim/build/oled_spi_vcs/csrc
+	vcs -full64 -sverilog -debug_access+all -top oled_spi_tb \
+	rtl/fpga/rtl/oled/oled_spi.sv rtl/fpga/tb/oled/oled_spi_tb.sv \
+	-Mdir=sim/build/oled_spi_vcs/csrc -o sim/build/oled_spi_vcs/simv \
+	-l sim/build/oled_spi_vcs/compile.log
+	./sim/build/oled_spi_vcs/simv -l sim/build/oled_spi_vcs/run.log
+
 uart-tx-test:
 	@mkdir -p sim/build/uart_tx_vcs/csrc
 	vcs -full64 -sverilog -debug_access+all -top uart_tx_tb \
-	rtl/fpga/rtl/uart_tx.sv rtl/fpga/tb/uart_rx_model.sv rtl/fpga/tb/uart_tx_tb.sv \
+	rtl/fpga/rtl/uart/uart_tx.sv rtl/fpga/tb/uart/uart_rx_model.sv rtl/fpga/tb/uart/uart_tx_tb.sv \
 	-Mdir=sim/build/uart_tx_vcs/csrc -o sim/build/uart_tx_vcs/simv \
 	-l sim/build/uart_tx_vcs/compile.log
 	./sim/build/uart_tx_vcs/simv -l sim/build/uart_tx_vcs/run.log

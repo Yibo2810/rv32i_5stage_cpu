@@ -6,8 +6,10 @@ module uart_16550 #(
     input logic wr_en,
     input logic [2:0] addr,
     input logic [7:0] wdata,
+    input logic tx_busy,
     output logic [7:0] rdata,
-    output logic tx
+    output logic [7:0] tx_data,
+    output logic tx_valid
 );
     // ==========================================================
     // LCR, IER, MCR, SCR (DLL/DLM when DLAB = 1) are 'real' regs
@@ -25,6 +27,7 @@ module uart_16550 #(
     assign dlab = lcr[7];
     // ============================================================
     // Write
+    assign tx_data = tx_valid ? wdata : 8'b0;
     always_ff @( posedge clk ) begin
         if (rst) begin
             ier <= 8'b0;
@@ -51,8 +54,6 @@ module uart_16550 #(
     end
     // =============================================================
     // Read
-    logic       tx_busy;
-    logic       tx_valid;
     logic [7:0] lsr;
     
     assign tx_valid = wr_en && !dlab && (addr == 3'd0);
@@ -72,13 +73,4 @@ module uart_16550 #(
                 default: ;
             endcase
         end
-
-    uart_tx #(.CLKS_PER_BIT(CLKS_PER_BIT)) u_uart_tx (
-    .clk(clk), 
-    .rst(rst),
-    .tx_valid(tx_valid),
-    .tx_data(wdata),
-    .tx_busy(tx_busy),
-    .tx(tx)
-    );
 endmodule

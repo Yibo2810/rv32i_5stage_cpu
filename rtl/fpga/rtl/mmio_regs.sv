@@ -12,10 +12,13 @@ module mmio_regs #(
   output logic        rsp_valid,
   input  logic        rsp_ready,
   output logic [31:0] rsp_rdata,
-
+  // TOHOST
   output logic        tohost_seen,
   output logic [31:0] tohost,
-  output logic        uart_txd
+  // UART_16550
+  output logic        uart_tx_valid,
+  input  logic        uart_tx_busy,
+  output logic [7:0]  uart_tx_data
 );
     
     // TOHOST
@@ -58,12 +61,14 @@ module mmio_regs #(
     end
 
     uart_16550 #(.CLKS_PER_BIT(CLKS_PER_BIT)) u_uart (
-    .clk(clk), 
-    .rst(rst),
-    .wr_en(uart_wr),
-    .addr(req_addr[4:2]),
-    .wdata(req_wdata[7:0]),
-    .rdata(uart_rdata),
-    .tx(uart_txd)
+        .clk(clk), 
+        .rst(rst),
+        .wr_en(uart_wr),
+        .addr(req_addr[4:2]),
+        .rdata(uart_rdata),
+        .wdata(req_wdata[7:0]),
+        .tx_data(uart_tx_data),
+        .tx_valid(uart_tx_valid),
+        .tx_busy(uart_tx_busy)
     );
 endmodule

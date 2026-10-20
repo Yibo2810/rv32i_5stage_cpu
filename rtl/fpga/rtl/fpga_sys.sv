@@ -9,7 +9,8 @@ import single_pkg::*;
     parameter logic [31:0] MMIO_BASE = 32'h1000_0000,
     parameter int          MMIO_AW   = 12,              // MMIO = 4 KB, see mmio_regs word_off
     parameter string       RAM_INIT  = "uart_hello.mem",
-    parameter int          UART_CLKS_PER_BIT = 217
+    parameter int          UART_CLKS_PER_BIT = 217,
+    parameter int          PANIC_PERIOD      = 25_000_000
 ) (
     input logic clk,
     input logic rst,
@@ -76,8 +77,18 @@ import single_pkg::*;
     exc_cause_e  trap_cause;
     logic [31:0] trap_pc;
 
+    // UART
+    logic        uart_tx_valid;
+    logic [7:0]  uart_tx_data;
+    logic        uart_tx_busy;
+    logic        mmio_tx_valid;
+    logic [7:0]  mmio_tx_data;
+    logic        panic_tx_valid;
+    logic [7:0]  panic_tx_data;
+
     // ERROR
     logic        dmem_rsp_err;
+    logic [31:0] bus_err_addr;
     assign error_trap = halted && trap_cause_q != EXC_BREAKPOINT;
     always_ff @( posedge clk ) begin
         if (rst) begin
@@ -177,6 +188,7 @@ import single_pkg::*;
         .mmio_rsp_ready(mmio_rsp_ready),
         .mmio_rsp_rdata(mmio_rsp_rdata),
         .bus_err(bus_err),
+        .bus_err_addr(bus_err_addr),
         .dmem_rsp_err(dmem_rsp_err)
     );
 
@@ -194,6 +206,35 @@ import single_pkg::*;
         .rsp_rdata  (mmio_rsp_rdata),
         .tohost     (tohost),
         .tohost_seen(tohost_seen),
-        .uart_txd   (uart_txd)
+        .uart_tx_busy(uart_tx_busy),
+        .uart_tx_valid(mmio_tx_valid),
+        .uart_tx_data(mmio_tx_data)
+    );
+
+    halt_reporter #(.PERIOD(PANIC_PERIOD)) u_panic (
+        .clk         (clk),
+        .rst         (rst),
+        .halted      (halted),
+        .trap_cause_q(trap_cause_q),
+        .trap_pc_q   (trap_pc_q),
+        .tohost      (tohost),
+        .pass        (pass),
+        .bus_err     (bus_err),
+        .bus_err_addr(bus_err_addr),
+        .tx_valid    (panic_tx_valid),
+        .tx_data     (panic_tx_data),
+        .tx_busy     (uart_tx_busy)
+    );
+
+    assign uart_tx_valid = panic_tx_valid || mmio_tx_valid;
+    assign uart_tx_data  = panic_tx_valid ? panic_tx_data : mmio_tx_data;
+
+    uart_tx #(.CLKS_PER_BIT(UART_CLKS_PER_BIT)) u_uart_tx (
+        .clk(clk), 
+        .rst(rst),
+        .tx_valid(uart_tx_valid),
+        .tx_data(uart_tx_data),
+        .tx_busy(uart_tx_busy),
+        .tx(uart_txd)
     );
     endmodule
