@@ -38,3 +38,11 @@ set_property -dict { PACKAGE_PIN T10   IOSTANDARD LVCMOS33 } [get_ports { led[3]
 #set_property -dict { PACKAGE_PIN B9    IOSTANDARD LVCMOS33 } [get_ports { btn[2] }]; #IO_L11N_T1_SRCC_16 Sch=btn[2]
 #set_property -dict { PACKAGE_PIN B8    IOSTANDARD LVCMOS33 } [get_ports { btn[3] }]; #IO_L12P_T1_MRCC_16 Sch=btn[3]
 
+set_property -dict { PACKAGE_PIN G13 IOSTANDARD LVCMOS33 } [get_ports { oled_cs_n   }]; # JA1
+set_property -dict { PACKAGE_PIN B11 IOSTANDARD LVCMOS33 } [get_ports { oled_mosi   }]; # JA2
+set_property -dict { PACKAGE_PIN D12 IOSTANDARD LVCMOS33 } [get_ports { oled_sclk   }]; # JA4
+set_property -dict { PACKAGE_PIN D13 IOSTANDARD LVCMOS33 } [get_ports { oled_dc     }]; # JA7
+set_property -dict { PACKAGE_PIN B18 IOSTANDARD LVCMOS33 } [get_ports { oled_res_n  }]; # JA8
+set_property -dict { PACKAGE_PIN A18 IOSTANDARD LVCMOS33 } [get_ports { oled_vccen  }]; # JA9
+set_property -dict { PACKAGE_PIN K16 IOSTANDARD LVCMOS33 } [get_ports { oled_pmoden }]; # JA10
+#set_property IOB TRUE [get_ports { oled_cs_n oled_mosi oled_sclk oled_dc }]

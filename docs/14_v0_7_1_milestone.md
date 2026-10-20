@@ -2,10 +2,9 @@
 
 ## Versioning from here
 
-`v0.7.x` are the steps from the v0.7.0 core to a CPU that runs C programs.
-`v0.8.0` is reserved for that point: a C program built with a linker script
-and start-up code runs self-checking on the SoC, in simulation and on the
-board. Until then each step gets the next patch number.
+`v0.7.1` is the last small public tag; the next public release is `v1.0`.
+Work after v0.7.1 is tracked as short-term stages in
+[15_c_runtime_uart_panic.md](15_c_runtime_uart_panic.md).
 
 ## Summary
 
@@ -103,9 +102,6 @@ a single write enable each.
   `hazard_test` is linked at address 0 and no longer runs on this `fpga_sys`.
 - No Spike cross-check yet.
 
-## Toward v0.8.0 (tentative)
+## Next
 
-| Step | Content |
-|---|---|
-| v0.7.2 | Fail-path test in simulation and on the board; directed programs cross-checked against Spike at `0x8000_0000` |
-| v0.8.0 | Linker script + `crt0` + `gcc -march=rv32i`; a self-checking C program passes in simulation and on the board |
+Continued in [15_c_runtime_uart_panic.md](15_c_runtime_uart_panic.md).

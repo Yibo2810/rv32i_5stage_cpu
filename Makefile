@@ -1,6 +1,6 @@
 .PHONY: build run cov-build cov-run cov-report cov-report-md urg-report cov \
         pl-run pl-cov-report clean-artifacts clean distclean \
-        fs-build c-run c-spike uart-tx-test oled-spi-test
+        fs-build c-run c-spike uart-tx-test oled-spi-test oled-seq-test oled-ctrl-test
 
 BUILD_DIR := sim/build/core_vcs
 SIMV      := $(BUILD_DIR)/simv
@@ -149,6 +149,23 @@ oled-spi-test:
 	-Mdir=sim/build/oled_spi_vcs/csrc -o sim/build/oled_spi_vcs/simv \
 	-l sim/build/oled_spi_vcs/compile.log
 	./sim/build/oled_spi_vcs/simv -l sim/build/oled_spi_vcs/run.log
+
+oled-seq-test:
+	@mkdir -p sim/build/oled_seq_vcs/csrc
+	vcs -full64 -sverilog -debug_access+all -top oled_seq_tb \
+	rtl/fpga/rtl/oled/oled_spi.sv rtl/fpga/rtl/oled/oled_seq.sv rtl/fpga/tb/oled/oled_seq_tb.sv \
+	-Mdir=sim/build/oled_seq_vcs/csrc -o sim/build/oled_seq_vcs/simv \
+	-l sim/build/oled_seq_vcs/compile.log
+	./sim/build/oled_seq_vcs/simv -l sim/build/oled_seq_vcs/run.log
+
+oled-ctrl-test:
+	@mkdir -p sim/build/oled_ctrl_vcs/csrc
+	vcs -full64 -sverilog -debug_access+all -top oled_ctrl_tb \
+	rtl/fpga/rtl/oled/oled_spi.sv rtl/fpga/rtl/oled/oled_seq.sv rtl/fpga/rtl/oled/oled_fill.sv \
+	rtl/fpga/rtl/oled/oled_ctrl.sv rtl/fpga/tb/oled/ssd1331_model.sv rtl/fpga/tb/oled/oled_ctrl_tb.sv \
+	-Mdir=sim/build/oled_ctrl_vcs/csrc -o sim/build/oled_ctrl_vcs/simv \
+	-l sim/build/oled_ctrl_vcs/compile.log
+	./sim/build/oled_ctrl_vcs/simv -l sim/build/oled_ctrl_vcs/run.log
 
 uart-tx-test:
 	@mkdir -p sim/build/uart_tx_vcs/csrc

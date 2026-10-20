@@ -3,11 +3,17 @@
 A learning-oriented RV32I CPU project implemented in Verilog and
 SystemVerilog.
 
-**Current: v0.7.1** — reset PC at `0x8000_0000`, one RAM for text and data
+**Latest tag: v0.7.1** — reset PC at `0x8000_0000`, one RAM for text and data
 behind an address map (RAM / MMIO / unmapped), integration-tested in
-simulation, board smoke test passed. `v0.7.x` are the steps toward running C programs;
-`v0.8.0` will mark a self-checking C program running on the SoC in simulation
-and on the board. See [docs/14_v0_7_1_milestone.md](docs/14_v0_7_1_milestone.md).
+simulation, board smoke test passed. See
+[docs/14_v0_7_1_milestone.md](docs/14_v0_7_1_milestone.md). The next public
+release is `v1.0`.
+
+**Since v0.7.1 (untagged):** bare-metal C (`crt0`, linker script, `sw/`) runs on
+the SoC in simulation and on the board; a 16550-subset UART TX prints from C on
+the board; a hardware panic line (halt cause, PC, `tohost`, bus error address)
+passes in simulation; a Pmod OLEDrgb driver is under development. See
+[docs/15_c_runtime_uart_panic.md](docs/15_c_runtime_uart_panic.md).
 
 The pipeline has run on an FPGA board since **v0.6.0**: on a Digilent Arty
 A7-100T at 25 MHz, a directed hazard program with a self-checking tail reports
@@ -277,7 +283,8 @@ Important files:
 | `rtl/include/single_pkg.sv` | Shared SystemVerilog RV32I constants and control types |
 | `rtl/single_cycle/` | Current verified single-cycle CPU RTL |
 | `rtl/pipeline/` | Five-stage pipeline RTL: `{if,id,ex,mem,wb}_stage.sv`, `pipeline_regs.sv`, `hazard_unit.sv`, `forwarding_unit.sv`, `core_5stage.sv`, `memory/dmem_bram.sv` (see [docs/03_pipeline_design.md](docs/03_pipeline_design.md)) |
-| `rtl/fpga/rtl/` | Portable FPGA system: `fpga_sys.sv` (core + RAM + decoder + trap latch + pass/fail), `sys_ram.sv` (one block RAM, fetch port + data port), `dmem_xbar.sv` (RAM / MMIO / unmapped decode), `mmio_regs.sv` (`tohost`). `imem_rom.sv` is the v0.7.0 instruction ROM, no longer instantiated |
+| `rtl/fpga/rtl/` | Portable FPGA system: `fpga_sys.sv` (core + RAM + decoder + trap latch + pass/fail), `sys_ram.sv` (one block RAM, fetch port + data port), `dmem_xbar.sv` (RAM / MMIO / unmapped decode), `mmio_regs.sv` (`tohost` + UART registers), `halt_reporter.sv` (hardware panic line), `uart/` (16550 subset, `uart_tx`), `oled/` (Pmod OLEDrgb, under development) |
+| `sw/` | Bare-metal C: `common/{rt,drv,lib}` (start-up, linker script, drivers, print) and `programs/<prog>/`; `make c-run PROG=<prog>`, `make c-spike PROG=<prog>` |
 | `programs/fpga/asm/` | System-level test programs linked at `0x8000_0000` (`mmap_test.S`) |
 | `rtl/fpga/arty_a7/` | Arty A7-100T board wrapper (`arty_a7_top.sv`: MMCM, reset synchronizer, LED views) and pin constraints (`arty_a7.xdc`) |
 | `rtl/fpga/tb/fpga_sys_tb.sv` | VCS testbench for `fpga_sys`: backdoor program load (`+MEM=`), run to halt, verdict checks (`+EXPECT_TOHOST=`) |
@@ -471,8 +478,10 @@ Documented in detail in
 6. **v0.7.x — toward C:** ~~address map, unified RAM, SoC test program,
    data in the RAM region, SoC on the board~~ **(v0.7.1: integration-tested in
    simulation, board smoke test passed)**; next the fail path and a Spike
-   cross-check. **v0.8.0** = a self-checking C program
-   (linker script + `crt0`) runs in simulation and on the board.
+   cross-check.
+   **After v0.7.1:** C runtime and UART TX on the board, hardware panic in
+   simulation, OLEDrgb under development; next UART RX + loader
+   ([docs/15](docs/15_c_runtime_uart_panic.md)).
 7. Peripherals on a bus (UART, timer), interrupts with CSRs and trap handling,
    caches, external memory; an external ISA reference (riscv-arch-test, Spike
    or Sail).

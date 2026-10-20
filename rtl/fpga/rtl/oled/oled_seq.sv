@@ -7,13 +7,13 @@ module oled_seq
 ) (
     input  logic rst, clk,
     output logic spi_valid,
-    output logic spi_data,
+    output logic [7:0] spi_data,
     input  logic spi_busy,
     output logic pmoden, res_n, vccen,
     output logic done
 );
 
-    logic AW = $clog2(MS_CYCLES);
+    localparam int AW = $clog2(MS_CYCLES);
     logic [5:0] pc; // 56 microcode instructions based on the OLED datasheet
     logic in_wait;
     logic [7:0] ms_left;
@@ -29,11 +29,11 @@ module oled_seq
         return {2'b00, b};
     endfunction
     // Setup pin {pmoden, res_n, vccen}
-    function automatic logic [2:0] P(input logic [2:0] p);
+    function automatic logic [9:0] P(input logic [2:0] p);
         return {2'b01, 5'b0, p};
     endfunction
     // Wait ms
-    function automatic logic [7:0] W(input logic [7:0] ms);
+    function automatic logic [9:0] W(input logic [7:0] ms);
         return {2'b10, ms};
     endfunction
     // End
@@ -52,7 +52,9 @@ module oled_seq
         8'h2E,                              // close rolling
         8'h25, 8'h00, 8'h00, 8'h5F, 8'h3F   // clear display: (0,0)-(95,63)
     };
-    
+    assign spi_valid = (op == 2'b00);
+    assign spi_data = arg;
+
     always_comb begin
         case (pc)
             6'd0:  rom = P(3'b110);
@@ -85,16 +87,38 @@ module oled_seq
         else begin
             case (op)
                 2'b00: begin
+                    if (!spi_busy) pc <= pc + 1'b1;
+                end
+
+                2'b01: begin
                     {pmoden, res_n, vccen} <= arg[2:0];
                     pc <= pc + 1'b1;
                 end
 
-                2'b01: begin
-                    spi_valid = 1'b1;
-                    spi_data = arg;
-                    if (!spi_busy) pc <= pc + 1'b1;
+                2'b10: begin
+                    if (in_wait == 1'b0) begin
+                        ms_left <= arg;
+                        tick_cnt <= '0;
+                        in_wait <= 1'b1;
+                    end else begin
+                        if (ms_left == 8'b0) begin
+                            in_wait <= 1'b0;
+                            pc <= pc + 1'b1;
+                        end
+                        else begin
+                            if (tick_cnt == MS_CYCLES-1) begin
+                                tick_cnt <= 1'b0;
+                                ms_left <= ms_left - 1'b1;
+                            end
+                            else tick_cnt <= tick_cnt + 1'b1;
+                        end
+                    end
                 end
-                default: 
+
+                2'b11: begin
+                    done <= 1'b1;
+                end
+                default: ;
             endcase
         end
     end

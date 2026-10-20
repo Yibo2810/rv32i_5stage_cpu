@@ -1,10 +1,23 @@
 module arty_a7_top (
+    // Basic
     input logic clk_100mhz,
     input logic reset_n,
     input logic [1:0] sw,
     output logic [3:0] led,
+
+    // UART
     output logic uart_rxd_out,
 
+    // OLEDrgb
+    output logic oled_cs_n,
+    output logic oled_mosi,
+    output logic oled_sclk,
+    output logic oled_dc,
+    output logic oled_res_n,
+    output logic oled_vccen,
+    output logic oled_pmoden,
+
+    // RGB light
     output logic led0_r,
     output logic led0_g,
     output logic led0_b,
@@ -150,5 +163,17 @@ module arty_a7_top (
         .error_trap(error_trap),
         .bus_err(bus_err),
         .uart_txd(uart_rxd_out)
+    );
+
+    oled_ctrl u_ctrl (
+        .clk(clk_25mhz),
+        .rst(rst),
+        .oled_pmoden(oled_pmoden),
+        .oled_res_n(oled_res_n),
+        .oled_vccen(oled_vccen),
+        .oled_dc(oled_dc),
+        .oled_mosi(oled_mosi),
+        .oled_cs_n(oled_cs_n),
+        .oled_sclk(oled_sclk)
     );
 endmodule
