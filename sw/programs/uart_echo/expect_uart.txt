@@ -1,0 +1,3 @@
+echo ready
+Hi RV32, echo test 0x41 
+bye

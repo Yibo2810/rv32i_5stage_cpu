@@ -2,15 +2,16 @@
 
 module fpga_sys
 import single_pkg::*;
+import peripherals::*;
 #(
-    parameter logic [31:0] RESET_PC  = 32'h8000_0000,
-    parameter logic [31:0] RAM_BASE  = 32'h8000_0000,
-    parameter int          RAM_AW    = 16,              // RAM = 2**16 B = 64 KB
-    parameter logic [31:0] MMIO_BASE = 32'h1000_0000,
-    parameter int          MMIO_AW   = 12,              // MMIO = 4 KB, see mmio_regs word_off
-    parameter string       RAM_INIT  = "uart_hello.mem",
-    parameter int          UART_CLKS_PER_BIT = 217,
-    parameter int          PANIC_PERIOD      = 25_000_000
+    parameter logic [31:0] RESET_PC          = SOC_RESET_PC,
+    parameter logic [31:0] RAM_BASE          = SOC_RAM_BASE,
+    parameter int          RAM_AW            = SOC_RAM_AW,
+    parameter logic [31:0] MMIO_BASE         = SOC_MMIO_BASE,
+    parameter int          MMIO_AW           = SOC_MMIO_AW,
+    parameter string       RAM_INIT          = "uart_hello.mem",
+    parameter int          UART_CLKS_PER_BIT = SOC_UART_CPB,
+    parameter int          PANIC_PERIOD      = SOC_CLK_HZ
 ) (
     input logic clk,
     input logic rst,
@@ -26,7 +27,8 @@ import single_pkg::*;
     output logic mark_seen,
     output logic error_trap,
     output logic bus_err,
-    output logic uart_txd
+    output logic uart_txd,
+    input  logic uart_rxd
 );
     localparam int RAM_WORDS = 1 << (RAM_AW - 2);   // sys_ram depth = RAM region size / 4
 
@@ -78,6 +80,7 @@ import single_pkg::*;
     logic [31:0] trap_pc;
 
     // UART
+    // TX
     logic        uart_tx_valid;
     logic [7:0]  uart_tx_data;
     logic        uart_tx_busy;
@@ -85,7 +88,11 @@ import single_pkg::*;
     logic [7:0]  mmio_tx_data;
     logic        panic_tx_valid;
     logic [7:0]  panic_tx_data;
-
+    // RX
+    logic        uart_rx_valid;
+    logic [7:0]  uart_rx_data;
+    logic        uart_rx_err;
+    
     // ERROR
     logic        dmem_rsp_err;
     logic [31:0] bus_err_addr;
@@ -192,7 +199,7 @@ import single_pkg::*;
         .dmem_rsp_err(dmem_rsp_err)
     );
 
-    mmio_regs #(.CLKS_PER_BIT(UART_CLKS_PER_BIT)) u_mmio (
+    mmio_regs u_mmio (
         .clk        (clk),
         .rst        (rst),
         .req_valid  (mmio_req_valid),
@@ -208,7 +215,10 @@ import single_pkg::*;
         .tohost_seen(tohost_seen),
         .uart_tx_busy(uart_tx_busy),
         .uart_tx_valid(mmio_tx_valid),
-        .uart_tx_data(mmio_tx_data)
+        .uart_tx_data(mmio_tx_data),
+        .uart_rx_valid(uart_rx_valid),
+        .uart_rx_data(uart_rx_data),
+        .uart_rx_err(uart_rx_err)
     );
 
     halt_reporter #(.PERIOD(PANIC_PERIOD)) u_panic (
@@ -236,5 +246,14 @@ import single_pkg::*;
         .tx_data(uart_tx_data),
         .tx_busy(uart_tx_busy),
         .tx(uart_txd)
+    );
+
+    uart_rx #(.CLKS_PER_BIT(UART_CLKS_PER_BIT)) u_uart_rx (
+        .clk(clk), 
+        .rst(rst),
+        .rx_valid(uart_rx_valid),
+        .rx_data(uart_rx_data),
+        .frame_err(uart_rx_err),
+        .rx(uart_rxd)
     );
     endmodule

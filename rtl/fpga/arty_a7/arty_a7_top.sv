@@ -7,6 +7,7 @@ module arty_a7_top (
 
     // UART
     output logic uart_rxd_out,
+    input  logic uart_txd_in,
 
     // OLEDrgb
     output logic oled_cs_n,
@@ -162,7 +163,8 @@ module arty_a7_top (
         .mark_seen(mark_seen),
         .error_trap(error_trap),
         .bus_err(bus_err),
-        .uart_txd(uart_rxd_out)
+        .uart_txd(uart_rxd_out),
+        .uart_rxd(uart_txd_in)
     );
 
     oled_ctrl u_ctrl (

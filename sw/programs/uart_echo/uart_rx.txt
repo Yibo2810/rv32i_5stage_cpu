@@ -1,0 +1,1 @@
+Hi RV32, echo test 0x41 q

@@ -23,6 +23,7 @@ module fpga_sys_tb;
     logic        error_trap;
     logic        bus_err;
     logic        uart_txd;
+    logic        uart_rxd = 1'b1;   // PC -> FPGA line, idle high; driven by the sender below
 
     // ---- TB variables
     string       mem;
@@ -35,6 +36,9 @@ module fpga_sys_tb;
     string       expect_uart_file;  // +EXPECT_UART_FILE=, exact expected UART text ("\r\n" counted as "\n")
     logic [31:0] expect_bus_err_addr; // +EXPECT_BUS_ERR_ADDR=, first unmapped address (checked only if given)
     int unsigned n_prog;            // UART bytes sent by the program, before the panic printer took over
+    string       uart_rx_file;      // +UART_RX_FILE=, bytes the "PC" types into uart_rxd (trailing CR/LF dropped)
+    int unsigned rx_sent    = 0;
+    int unsigned rx_no_echo = 0;
 
     task automatic apply_reset();
         rst = 1'b1;
@@ -115,15 +119,71 @@ module fpga_sys_tb;
         return s;
     endfunction
 
-    // Program bytes [0, n_prog) with every "\r\n" folded to "\n" (print_puts sends CRLF for terminals)
+    // Program bytes [0, n_prog) with every "\r\n" folded to "\n" (print_puts sends CRLF for terminals).
+    // A NUL byte is written as the text "\x00": string'(8'h00) is the empty string in SV,
+    // so a raw NUL would vanish from the comparison.
     function automatic string uart_text_lf();
         string s = "";
         for (int i = 0; i < n_prog; i++) begin
             if (u_rx.bytes[i] == 8'h0d && i + 1 < n_prog && u_rx.bytes[i+1] == 8'h0a) continue;
-            s = {s, string'(u_rx.bytes[i])};
+            if (u_rx.bytes[i] == 8'h00) s = {s, "\\x00"};
+            else                        s = {s, string'(u_rx.bytes[i])};
         end
         return s;
     endfunction
+
+    // ---- PC -> FPGA sender: 8N1 on real time (not on clk), random phase per frame.
+    // Paced by the echo: the next byte goes out only after the program has sent one byte
+    // back, so the single-byte RBR never overruns in this test (overrun is covered by
+    // uart_16550_tb). Starts after the program's first line (its prompt).
+    localparam realtime RX_BIT_NS = SIM_CPB * 40.0;
+
+    task automatic uart_send_byte(input logic [7:0] b);
+        #($urandom_range(0, 39999) * 1ps);
+        uart_rxd = 1'b0;
+        #(RX_BIT_NS);
+        for (int i = 0; i < 8; i++) begin
+            uart_rxd = b[i];
+            #(RX_BIT_NS);
+        end
+        uart_rxd = 1'b1;
+        #(RX_BIT_NS);
+    endtask
+
+    function automatic bit uart_seen_lf();
+        foreach (u_rx.bytes[i]) if (u_rx.bytes[i] == 8'h0a) return 1'b1;
+        return 1'b0;
+    endfunction
+
+    initial begin
+        string       txt;
+        int unsigned guard, n_before;
+        if ($value$plusargs("UART_RX_FILE=%s", uart_rx_file)) begin
+            txt = read_file(uart_rx_file);
+            while (txt.len() > 0 && (txt[txt.len()-1] == "\n" || txt[txt.len()-1] == 8'h0d))
+                txt = txt.substr(0, txt.len() - 2);
+            @(negedge rst);
+            guard = 0;
+            while (!uart_seen_lf() && guard < 1_000_000) begin
+                @(negedge clk);
+                guard++;
+            end
+            for (int i = 0; i < txt.len(); i++) begin
+                n_before = u_rx.bytes.size();
+                uart_send_byte(txt[i]);
+                rx_sent++;
+                guard = 0;
+                while (u_rx.bytes.size() <= n_before && guard < 40 * SIM_CPB) begin
+                    @(negedge clk);
+                    guard++;
+                end
+                if (u_rx.bytes.size() <= n_before) begin
+                    rx_no_echo++;
+                    $display("UART RX: no echo for byte %0d (%02h)", i, txt[i]);
+                end
+            end
+        end
+    end
 
     function automatic void report (string name);
         errors++;
@@ -166,11 +226,17 @@ module fpga_sys_tb;
         if (pass != (expect_tohost == 1)) report("pass");
         if (bus_err != expect_bus_err) report("bus_err");
         if (u_rx.framing_errors || u_rx.false_starts || u_rx.x_samples) report("uart_frame");
+        if (uart_rx_file != "") begin
+            $display("SUMMARY uart_rx sent=%0d no_echo=%0d (%s)", rx_sent, rx_no_echo, uart_rx_file);
+            if (rx_no_echo != 0) report("uart_rx_echo");
+        end
         if ($value$plusargs("EXPECT_UART_FILE=%s", expect_uart_file)) begin
             automatic string want = read_file(expect_uart_file);
             automatic string got  = uart_text_lf();
             if (got != want) begin
                 $display("UART MISMATCH: got %0d chars, expected %0d (%s)", got.len(), want.len(), expect_uart_file);
+                $display("  got : \"%s\"", got);
+                $display("  want: \"%s\"", want);
                 report("uart_text");
             end else begin
                 $display("UART MATCH: %0d chars == %s", got.len(), expect_uart_file);
@@ -220,7 +286,8 @@ module fpga_sys_tb;
         .mark_seen   (mark_seen),
         .error_trap  (error_trap),
         .bus_err     (bus_err),
-        .uart_txd    (uart_txd)
+        .uart_txd    (uart_txd),
+        .uart_rxd    (uart_rxd)
     );
 
     uart_rx_model #(.CLKS_PER_BIT(SIM_CPB)) u_rx (

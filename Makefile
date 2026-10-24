@@ -1,6 +1,6 @@
 .PHONY: build run cov-build cov-run cov-report cov-report-md urg-report cov \
         pl-run pl-cov-report clean-artifacts clean distclean \
-        fs-build c-run c-spike uart-tx-test oled-spi-test oled-seq-test oled-ctrl-test
+        fs-build c-run c-spike uart-tx-test oled-spi-test oled-seq-test oled-ctrl-test uart-rx-test uart-16550-test
 
 BUILD_DIR := sim/build/core_vcs
 SIMV      := $(BUILD_DIR)/simv
@@ -122,8 +122,9 @@ fs-build:
 	-debug_access+all \
 	-top fpga_sys_tb \
 	-f tb/filelists/pipeline_rtl.f \
+	rtl/fpga/rtl/include/peripherals.sv \
 	rtl/fpga/rtl/sys_ram.sv rtl/fpga/rtl/dmem_xbar.sv rtl/fpga/rtl/mmio_regs.sv \
-	rtl/fpga/rtl/uart/uart_tx.sv rtl/fpga/rtl/uart/uart_16550.sv rtl/fpga/rtl/halt_reporter.sv \
+	rtl/fpga/rtl/uart/uart_tx.sv rtl/fpga/rtl/uart/uart_rx.sv rtl/fpga/rtl/uart/uart_16550.sv rtl/fpga/rtl/halt_reporter.sv \
 	rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/uart/uart_rx_model.sv rtl/fpga/tb/fpga_sys_tb.sv \
 	-Mdir=$(FS_BUILD_DIR)/csrc \
 	-o $(FS_SIMV) \
@@ -131,17 +132,20 @@ fs-build:
 
 # sw/programs/<PROG>/expect_uart.txt, if present, is the exact expected UART output.
 UART_EXPECT = $(wildcard sw/programs/$(PROG)/expect_uart.txt)
+# sw/programs/<PROG>/uart_rx.txt, if present, is typed into uart_rxd (echo-paced) by fpga_sys_tb.
+UART_RX_IN  = $(wildcard sw/programs/$(PROG)/uart_rx.txt)
 MAX_CYCLES ?= 200000
 
 c-run: fs-build
 	$(MAKE) -C sw PROG=$(PROG)
 	./$(FS_SIMV) +MEM=rtl/fpga/build/$(PROG).mem +MAX_CYCLES=$(MAX_CYCLES) \
-	$(if $(UART_EXPECT),+EXPECT_UART_FILE=$(UART_EXPECT)) $(ARGS) -l $(FS_BUILD_DIR)/run.log
+	$(if $(UART_EXPECT),+EXPECT_UART_FILE=$(UART_EXPECT)) $(if $(UART_RX_IN),+UART_RX_FILE=$(UART_RX_IN)) \
+	$(ARGS) -l $(FS_BUILD_DIR)/run.log
 
 c-spike:
 	$(MAKE) -C sw PROG=$(PROG) spike
 
-# uart_tx unit test against the independent TB receiver model
+# OLED unit tests (TB plays the SSD1331; oled-ctrl-test writes frame.ppm)
 oled-spi-test:
 	@mkdir -p sim/build/oled_spi_vcs/csrc
 	vcs -full64 -sverilog -debug_access+all -top oled_spi_tb \
@@ -167,6 +171,30 @@ oled-ctrl-test:
 	-l sim/build/oled_ctrl_vcs/compile.log
 	./sim/build/oled_ctrl_vcs/simv -l sim/build/oled_ctrl_vcs/run.log
 
+# uart_rx: behavioral sender on real time, random phase, +-3 % baud; CPB 12 and 217
+uart-rx-test:
+	@mkdir -p sim/build/uart_rx_vcs/csrc sim/build/uart_rx_vcs/csrc217
+	vcs -full64 -sverilog -debug_access+all -top uart_rx_tb \
+	rtl/fpga/rtl/include/peripherals.sv rtl/fpga/rtl/uart/uart_rx.sv rtl/fpga/tb/uart/uart_rx_tb.sv \
+	-Mdir=sim/build/uart_rx_vcs/csrc -o sim/build/uart_rx_vcs/simv \
+	-l sim/build/uart_rx_vcs/compile.log
+	./sim/build/uart_rx_vcs/simv -l sim/build/uart_rx_vcs/run.log
+	vcs -full64 -sverilog -top uart_rx_tb -pvalue+uart_rx_tb.CPB=217 \
+	rtl/fpga/rtl/include/peripherals.sv rtl/fpga/rtl/uart/uart_rx.sv rtl/fpga/tb/uart/uart_rx_tb.sv \
+	-Mdir=sim/build/uart_rx_vcs/csrc217 -o sim/build/uart_rx_vcs/simv217 \
+	-l sim/build/uart_rx_vcs/compile217.log
+	./sim/build/uart_rx_vcs/simv217 -l sim/build/uart_rx_vcs/run217.log
+
+# uart_16550 register-level unit test (status-bit corners, same-cycle set/clear)
+uart-16550-test:
+	@mkdir -p sim/build/uart_16550_vcs/csrc
+	vcs -full64 -sverilog -debug_access+all -top uart_16550_tb \
+	rtl/fpga/rtl/include/peripherals.sv rtl/fpga/rtl/uart/uart_16550.sv rtl/fpga/tb/uart/uart_16550_tb.sv \
+	-Mdir=sim/build/uart_16550_vcs/csrc -o sim/build/uart_16550_vcs/simv \
+	-l sim/build/uart_16550_vcs/compile.log
+	./sim/build/uart_16550_vcs/simv -l sim/build/uart_16550_vcs/run.log
+
+# uart_tx unit test against the independent TB receiver model
 uart-tx-test:
 	@mkdir -p sim/build/uart_tx_vcs/csrc
 	vcs -full64 -sverilog -debug_access+all -top uart_tx_tb \

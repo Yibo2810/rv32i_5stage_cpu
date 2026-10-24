@@ -18,6 +18,7 @@
 #define LCR_8N1   0x03          /* word length 8, 1 stop, no parity */
 #define LSR_THRE  0x20          /* bit5: THR empty, can accept a byte */
 #define LSR_TEMT  0x40          /* bit6: THR and shift register both empty */
+#define LSR_DR    0x01
 
 void uart_init (void)
 {
@@ -35,4 +36,9 @@ void uart_putc(char c)
 {
     while ((UART_LSR & LSR_THRE) == 0){}
     UART_THR = (uint8_t)c;
+}
+
+char uart_getc(void) {
+    while ((UART_LSR & LSR_DR) == 0) {}
+    return UART_RBR;
 }
