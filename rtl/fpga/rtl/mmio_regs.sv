@@ -25,7 +25,15 @@ import peripherals::*;
   // RX
   input  logic        uart_rx_valid,
   input  logic [7:0]  uart_rx_data,
-  input  logic        uart_rx_err
+  input  logic        uart_rx_err,
+
+  // OLEDrgb COLOR and TXT
+  output logic        oled_txt_wr,
+  output logic [6:0]  oled_txt_idx,
+  output logic [7:0]  oled_txt_data,
+  output logic        oled_col_wr,
+  output logic [2:0]  oled_col_idx,
+  output logic [15:0] oled_col_data
 );
     
     // TOHOST
@@ -41,6 +49,17 @@ import peripherals::*;
     assign uart_sel = (word_off[9:3] == MMIO_UART_BLOCK);
     assign uart_wr  = fire && req_write && uart_sel && req_wstrb[0];
     assign uart_rd = fire && !req_write && uart_sel;
+    // =================================================
+    // OLED
+    logic txt_sel, col_sel;
+    assign txt_sel = (word_off[9:7] == MMIO_TXT_BLOCK);   // 0x1000_02xx -> req_addr[11:0]=0010_xxxx_xx00
+    assign col_sel = (word_off[9:3] == MMIO_COLOR_BLOCK); // 
+    assign oled_txt_idx  = word_off[6:0];
+    assign oled_txt_data = word_off[7:0];                 // 0x1000_0200 -> 0x1000_02xx
+    assign oled_col_idx  = word_off[2:0];
+    assign oled_col_data = req_wdata[15:0];
+    assign oled_txt_wr   = fire && req_write && txt_sel && req_wstrb[0]; // req_wstrb = 4'b1111
+    assign oled_col_wr   = fire && req_write && col_sel && (req_wstrb[1:0] == 2'b11);
     // =================================================
     always_ff @( posedge clk ) begin
         if (rst) begin
@@ -82,4 +101,5 @@ import peripherals::*;
         .rx_data(uart_rx_data),
         .rx_frame_err(uart_rx_err)
     );
+
 endmodule

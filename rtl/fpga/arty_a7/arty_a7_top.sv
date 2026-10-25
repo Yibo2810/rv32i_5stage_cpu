@@ -164,13 +164,8 @@ module arty_a7_top (
         .error_trap(error_trap),
         .bus_err(bus_err),
         .uart_txd(uart_rxd_out),
-        .uart_rxd(uart_txd_in)
-    );
-
-    oled_ctrl u_ctrl (
-        .clk(clk_25mhz),
-        .rst(rst),
-        .oled_pmoden(oled_pmoden),
+        .uart_rxd(uart_txd_in),
+        // OLED
         .oled_res_n(oled_res_n),
         .oled_vccen(oled_vccen),
         .oled_dc(oled_dc),
@@ -178,4 +173,5 @@ module arty_a7_top (
         .oled_cs_n(oled_cs_n),
         .oled_sclk(oled_sclk)
     );
+
 endmodule

@@ -11,7 +11,8 @@ import peripherals::*;
     parameter int          MMIO_AW           = SOC_MMIO_AW,
     parameter string       RAM_INIT          = "uart_hello.mem",
     parameter int          UART_CLKS_PER_BIT = SOC_UART_CPB,
-    parameter int          PANIC_PERIOD      = SOC_CLK_HZ
+    parameter int          PANIC_PERIOD      = SOC_CLK_HZ,
+    parameter int          OLED_MS_CYCLES    = 25_000
 ) (
     input logic clk,
     input logic rst,
@@ -26,9 +27,21 @@ import peripherals::*;
     output logic fail,
     output logic mark_seen,
     output logic error_trap,
+    // UART
     output logic bus_err,
     output logic uart_txd,
-    input  logic uart_rxd
+    input  logic uart_rxd,
+
+    output logic [31:0] bus_err_addr,
+
+    // OLEDrgb
+    output logic oled_cs_n,
+    output logic oled_mosi,
+    output logic oled_sclk,
+    output logic oled_dc,
+    output logic oled_res_n,
+    output logic oled_vccen,
+    output logic oled_pmoden
 );
     localparam int RAM_WORDS = 1 << (RAM_AW - 2);   // sys_ram depth = RAM region size / 4
 
@@ -92,10 +105,18 @@ import peripherals::*;
     logic        uart_rx_valid;
     logic [7:0]  uart_rx_data;
     logic        uart_rx_err;
+
+    // OLEDrgb
+    logic oled_cs_n,
+    logic oled_mosi,
+    logic oled_sclk,
+    logic oled_dc,
+    logic oled_res_n,
+    logic oled_vccen,
+    logic oled_pmoden
     
     // ERROR
     logic        dmem_rsp_err;
-    logic [31:0] bus_err_addr;
     assign error_trap = halted && trap_cause_q != EXC_BREAKPOINT;
     always_ff @( posedge clk ) begin
         if (rst) begin
@@ -211,8 +232,10 @@ import peripherals::*;
         .rsp_valid  (mmio_rsp_valid),
         .rsp_ready  (mmio_rsp_ready),
         .rsp_rdata  (mmio_rsp_rdata),
+        // TOHOST
         .tohost     (tohost),
         .tohost_seen(tohost_seen),
+        // UART
         .uart_tx_busy(uart_tx_busy),
         .uart_tx_valid(mmio_tx_valid),
         .uart_tx_data(mmio_tx_data),
@@ -255,5 +278,16 @@ import peripherals::*;
         .rx_data(uart_rx_data),
         .frame_err(uart_rx_err),
         .rx(uart_rxd)
+    );
+
+    oled_ctrl u_ctrl (
+        .clk(clk),
+        .rst(rst),
+        .oled_res_n(oled_res_n),
+        .oled_vccen(oled_vccen),
+        .oled_dc(oled_dc),
+        .oled_mosi(oled_mosi),
+        .oled_cs_n(oled_cs_n),
+        .oled_sclk(oled_sclk)
     );
     endmodule

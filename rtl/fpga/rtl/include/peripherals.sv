@@ -12,10 +12,17 @@ package peripherals;
 
     localparam logic [11:0] MMIO_OFF_UART    = 12'h000;
     localparam logic [11:0] MMIO_OFF_TOHOST  = 12'h100;     // 0x100 >> 2  tohost change to 0x100
+    localparam logic [11:0] MMIO_OFF_TXT     = 12'h200;
+    localparam logic [11:0] MMIO_OFF_COLOR   = 12'h400;
     localparam logic [31:0] SOC_UART0_BASE   = SOC_MMIO_BASE + 32'(MMIO_OFF_UART);
     localparam logic [31:0] SOC_TOHOST_ADDR  = SOC_MMIO_BASE + 32'(MMIO_OFF_TOHOST);
+    localparam logic [31:0] SOC_TXT_ADDR     = SOC_MMIO_BASE + 32'(MMIO_OFF_TXT);
+    localparam logic [31:0] SOC_COLOR_ADDR   = SOC_MMIO_BASE + 32'(MMIO_OFF_COLOR);
     localparam logic [9:0]  MMIO_WOFF_TOHOST = MMIO_OFF_TOHOST[11:2];
     localparam logic [6:0]  MMIO_UART_BLOCK  = MMIO_OFF_UART[11:5];
+
+    localparam logic [2:0]  MMIO_TXT_BLOCK   = MMIO_OFF_TXT[11:9];    // word_off[9:7]
+    localparam logic [6:0]  MMIO_COLOR_BLOCK = MMIO_OFF_COLOR[11:5];  // word_off[9:3]
 
     localparam int          UART_REG_SHIFT   = 2;
 
