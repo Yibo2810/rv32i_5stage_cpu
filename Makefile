@@ -1,6 +1,6 @@
 .PHONY: build run cov-build cov-run cov-report cov-report-md urg-report cov \
         pl-run pl-cov-report clean-artifacts clean distclean \
-        fs-build c-run c-spike uart-tx-test oled-spi-test oled-seq-test oled-ctrl-test uart-rx-test uart-16550-test
+        fs-build c-run c-spike uart-tx-test oled-spi-test oled-seq-test oled-ctrl-test uart-rx-test uart-16550-test oled-text-test oled-render-test
 
 BUILD_DIR := sim/build/core_vcs
 SIMV      := $(BUILD_DIR)/simv
@@ -125,7 +125,9 @@ fs-build:
 	rtl/fpga/rtl/include/peripherals.sv \
 	rtl/fpga/rtl/sys_ram.sv rtl/fpga/rtl/dmem_xbar.sv rtl/fpga/rtl/mmio_regs.sv \
 	rtl/fpga/rtl/uart/uart_tx.sv rtl/fpga/rtl/uart/uart_rx.sv rtl/fpga/rtl/uart/uart_16550.sv rtl/fpga/rtl/halt_reporter.sv \
-	rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/uart/uart_rx_model.sv rtl/fpga/tb/fpga_sys_tb.sv \
+	rtl/fpga/rtl/oled/oled_spi.sv rtl/fpga/rtl/oled/oled_seq.sv rtl/fpga/rtl/oled/oled_font.sv rtl/fpga/rtl/oled/oled_text.sv \
+	rtl/fpga/rtl/oled/oled_render.sv rtl/fpga/rtl/oled/oled_ctrl.sv \
+	rtl/fpga/rtl/fpga_sys.sv rtl/fpga/tb/uart/uart_rx_model.sv rtl/fpga/tb/oled/ssd1331_model.sv rtl/fpga/tb/fpga_sys_tb.sv \
 	-Mdir=$(FS_BUILD_DIR)/csrc \
 	-o $(FS_SIMV) \
 	-l $(FS_BUILD_DIR)/compile.log
@@ -165,7 +167,8 @@ oled-seq-test:
 oled-ctrl-test:
 	@mkdir -p sim/build/oled_ctrl_vcs/csrc
 	vcs -full64 -sverilog -debug_access+all -top oled_ctrl_tb \
-	rtl/fpga/rtl/oled/oled_spi.sv rtl/fpga/rtl/oled/oled_seq.sv rtl/fpga/rtl/oled/oled_fill.sv \
+	rtl/fpga/rtl/include/peripherals.sv rtl/fpga/rtl/oled/oled_spi.sv rtl/fpga/rtl/oled/oled_seq.sv \
+	rtl/fpga/rtl/oled/oled_font.sv rtl/fpga/rtl/oled/oled_text.sv rtl/fpga/rtl/oled/oled_render.sv \
 	rtl/fpga/rtl/oled/oled_ctrl.sv rtl/fpga/tb/oled/ssd1331_model.sv rtl/fpga/tb/oled/oled_ctrl_tb.sv \
 	-Mdir=sim/build/oled_ctrl_vcs/csrc -o sim/build/oled_ctrl_vcs/simv \
 	-l sim/build/oled_ctrl_vcs/compile.log
@@ -184,6 +187,24 @@ uart-rx-test:
 	-Mdir=sim/build/uart_rx_vcs/csrc217 -o sim/build/uart_rx_vcs/simv217 \
 	-l sim/build/uart_rx_vcs/compile217.log
 	./sim/build/uart_rx_vcs/simv217 -l sim/build/uart_rx_vcs/run217.log
+
+oled-text-test:
+	@mkdir -p sim/build/oled_text_vcs/csrc
+	vcs -full64 -sverilog -debug_access+all -top oled_text_tb \
+	rtl/fpga/rtl/include/peripherals.sv rtl/fpga/rtl/oled/oled_text.sv rtl/fpga/tb/oled/oled_text_tb.sv \
+	-Mdir=sim/build/oled_text_vcs/csrc -o sim/build/oled_text_vcs/simv \
+	-l sim/build/oled_text_vcs/compile.log
+	./sim/build/oled_text_vcs/simv -l sim/build/oled_text_vcs/run.log
+
+oled-render-test:
+	@mkdir -p sim/build/oled_render_vcs/csrc
+	vcs -full64 -sverilog -debug_access+all -top oled_render_tb \
+	rtl/fpga/rtl/include/peripherals.sv rtl/fpga/rtl/oled/oled_font.sv rtl/fpga/rtl/oled/oled_text.sv \
+	rtl/fpga/rtl/oled/oled_render.sv rtl/fpga/rtl/oled/oled_spi.sv \
+	rtl/fpga/tb/oled/ssd1331_model.sv rtl/fpga/tb/oled/oled_render_tb.sv \
+	-Mdir=sim/build/oled_render_vcs/csrc -o sim/build/oled_render_vcs/simv \
+	-l sim/build/oled_render_vcs/compile.log
+	./sim/build/oled_render_vcs/simv -l sim/build/oled_render_vcs/run.log
 
 # uart_16550 register-level unit test (status-bit corners, same-cycle set/clear)
 uart-16550-test:

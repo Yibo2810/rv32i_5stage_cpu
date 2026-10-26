@@ -171,7 +171,8 @@ module arty_a7_top (
         .oled_dc(oled_dc),
         .oled_mosi(oled_mosi),
         .oled_cs_n(oled_cs_n),
-        .oled_sclk(oled_sclk)
+        .oled_sclk(oled_sclk),
+        .oled_pmoden(oled_pmoden)
     );
 
 endmodule

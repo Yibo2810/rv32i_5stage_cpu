@@ -24,6 +24,27 @@ package peripherals;
     localparam logic [2:0]  MMIO_TXT_BLOCK   = MMIO_OFF_TXT[11:9];    // word_off[9:7]
     localparam logic [6:0]  MMIO_COLOR_BLOCK = MMIO_OFF_COLOR[11:5];  // word_off[9:3]
 
+    // ========================================================
+    // OLEDrgb
+    localparam int          OLED_ROWS        = 8;
+    localparam int          OLED_COLS        = 12;
+    localparam int          OLED_STRIDE      = 16;
+
+    localparam logic [15:0] RGB_BLACK        = 16'h0000;
+    localparam logic [15:0] RGB_WHITE        = 16'hFFFF;
+    localparam logic [15:0] RGB_RED          = 16'hF800;
+    localparam logic [15:0] RGB_GREEN        = 16'h07E0;
+    localparam logic [15:0] RGB_YELLOW       = 16'hFFE0;
+    localparam logic [15:0] RGB_BLUE         = 16'h001F;
+
+    function automatic logic [7:0] hex_ch(input logic [3:0] n);
+        return (n < 4'd10) ? 8'h30 + 8'(n) : 8'h57 + 8'(n);
+    endfunction
+
+    function automatic logic [63:0] hex8_str(input logic [31:0] v);
+        for (int k = 0; k < 8; k++) hex8_str[8*k +: 8] = hex_ch(v[4*k +: 4]);
+    endfunction
+    // ==========================================================
     localparam int          UART_REG_SHIFT   = 2;
 
     localparam logic [2:0]  UART_RBR = 3'd0;

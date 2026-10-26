@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 module halt_reporter
-import single_pkg::*;
+import peripherals::*;
 #(
     parameter int PERIOD = 25_000_000
 ) (
@@ -19,25 +19,20 @@ import single_pkg::*;
     output logic [7:0]  tx_data,
     input  logic        tx_busy
 );
-    localparam int LEN = 72;
-    localparam int IW  = $clog2(LEN);
+    localparam int LEN = 72;                    // have 72 character
+    localparam int IW  = $clog2(LEN);           // need 7-bit (2^6=64)
     localparam int CW  = $clog2(PERIOD + 1);
 
-    function automatic logic [7:0] hex(input logic [3:0] n);
-        return (n < 4'd10) ? 8'h30 + 8'(n) : 8'h57 + 8'(n);
-    endfunction
+    
 
-    function automatic logic [63:0] hex8(input logic [31:0] v);
-        for (int k = 0; k < 8; k++) hex8[8*k +: 8] = hex(v[4*k +: 4]);
-    endfunction
+    logic [8*LEN-1:0] line;  // logic[72*8-1:0]
 
-    logic [8*LEN-1:0] line;
     assign line = {"\015\012HALT ", pass ? "PASS" : "FAIL",
-                   " cause=",  hex(4'(trap_cause_q)),
-                   " pc=",     hex8(trap_pc_q),
-                   " tohost=", hex8(tohost),
-                   " buserr=", hex({3'b0, bus_err}),
-                   " addr=",   hex8(bus_err_addr),
+                   " cause=",  hex_ch(4'(trap_cause_q)),
+                   " pc=",     hex8_str(trap_pc_q),
+                   " tohost=", hex8_str(tohost),
+                   " buserr=", hex_ch({3'b0, bus_err}),
+                   " addr=",   hex8_str(bus_err_addr),
                    "\015\012"};
 
     logic          sending;

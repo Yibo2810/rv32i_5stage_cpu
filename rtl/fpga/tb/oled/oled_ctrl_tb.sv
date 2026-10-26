@@ -3,11 +3,13 @@
 //   make oled-ctrl-test                     (MS_CYCLES = 10, HALF = 2)
 // Checks:
 //   - the 45 init bytes (D/C = 0) come first, unchanged
-//   - then N_FRAMES frames, each: 15 00 5F 75 00 3F (D/C = 0) + 12288 bytes (D/C = 1) = F8 00 ...
+//   - then N_FRAMES frames, each: 15 00 5F 75 00 3F (D/C = 0) + 12288 bytes with D/C = 1
 //   - pins after init: PMODEN = RES# = VCCEN = 1; model saw display on, no unknown command
-//   - every pixel of the model's GDDRAM is F800 after the frames
+//   - the out-of-reset screen (CPU running, no text written): row 0 = green status bar,
+//     rows 1-7 all black. Pixel-exact text checks live in oled_render_tb.
 // Writes sim/build/oled_ctrl_vcs/frame.ppm (open it: should be solid red).
 module oled_ctrl_tb;
+    import peripherals::*;
     localparam int MS_CYCLES = 10;
     localparam int HALF      = 2;
     localparam int N_FRAMES  = 2;
@@ -63,7 +65,8 @@ module oled_ctrl_tb;
             base = N_INIT + f * FRAME_LEN;
             for (int i = 0; i < 6; i++) expect_byte(base + i, WIN[i], 1'b0, $sformatf("frame %0d window", f));
             for (int i = 0; i < FRAME_LEN - 6; i++) begin
-                expect_byte(base + 6 + i, i[0] ? 8'h00 : 8'hF8, 1'b1, $sformatf("frame %0d pixel byte %0d", f, i));
+                if (base + 6 + i < u_oled.dcs.size() && u_oled.dcs[base + 6 + i] !== 1'b1)
+                    fail($sformatf("frame %0d pixel byte %0d sent with D/C = 0", f, i));
                 if (errors > 20) break;
             end
         end
@@ -74,8 +77,9 @@ module oled_ctrl_tb;
         if (u_oled.bad_cmds != 0) fail($sformatf("model saw %0d unknown command byte(s)", u_oled.bad_cmds));
         for (int r = 0; r < 64; r++)
             for (int c = 0; c < 96; c++)
-                if (u_oled.fb[r][c] !== 16'hF800) not_red++;
-        if (not_red != 0) fail($sformatf("%0d of 6144 pixels are not F800", not_red));
+                if (r < 8 ? !(u_oled.fb[r][c] inside {RGB_GREEN, RGB_BLACK}) : u_oled.fb[r][c] !== RGB_BLACK) not_red++;
+        if (not_red != 0) fail($sformatf("%0d of 6144 pixels differ from the reset screen (green bar, black below)", not_red));
+        if (u_oled.fb[0][90] !== RGB_GREEN) fail("status bar is not green at (90,0)");
 
         u_oled.dump_ppm("sim/build/oled_ctrl_vcs/frame.ppm");
         $display("SUMMARY bytes=%0d pixels_written=%0d display_on=%0d not_red=%0d cycles=%0d",
@@ -94,7 +98,11 @@ module oled_ctrl_tb;
         .oled_dc    (oled_dc),
         .oled_res_n (oled_res_n),
         .oled_vccen (oled_vccen),
-        .oled_pmoden(oled_pmoden)
+        .oled_pmoden(oled_pmoden),
+        .oled_txt_wr(1'b0), .oled_txt_idx(7'd0), .oled_txt_data(8'd0),
+        .oled_col_wr(1'b0), .oled_col_idx(3'd0), .oled_col_data(16'd0),
+        .halted(1'b0), .pass(1'b0), .trap_cause_q(4'd0), .trap_pc_q(32'd0),
+        .tohost(32'd0), .bus_err(1'b0), .bus_err_addr(32'd0)
     );
 
     ssd1331_model u_oled (

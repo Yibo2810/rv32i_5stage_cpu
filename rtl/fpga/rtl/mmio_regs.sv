@@ -52,12 +52,12 @@ import peripherals::*;
     // =================================================
     // OLED
     logic txt_sel, col_sel;
-    assign txt_sel = (word_off[9:7] == MMIO_TXT_BLOCK);   // 0x1000_02xx -> req_addr[11:0]=0010_xxxx_xx00
-    assign col_sel = (word_off[9:3] == MMIO_COLOR_BLOCK); // 
-    assign oled_txt_idx  = word_off[6:0];
-    assign oled_txt_data = word_off[7:0];                 // 0x1000_0200 -> 0x1000_02xx
-    assign oled_col_idx  = word_off[2:0];
-    assign oled_col_data = req_wdata[15:0];
+    assign txt_sel = (word_off[9:7] == MMIO_TXT_BLOCK);   // 0x1000_0200/03FF -> req_addr[11:2]=001x_xxxx_xx(00)
+    assign col_sel = (word_off[9:3] == MMIO_COLOR_BLOCK); // 0x1000_0400/041F -> req_addr[11:2]=0100_000x_xx(00)
+    assign oled_txt_idx  = word_off[6:0];                 // (001)x_xxxx_xx(00), high3=row, low4=column
+    assign oled_txt_data = req_wdata[7:0];                // from CPU, write in ASCII.
+    assign oled_col_idx  = word_off[2:0];                 // Write which row
+    assign oled_col_data = req_wdata[15:0];               // R[15:11], G[10:5], B[4:0]  RGB565
     assign oled_txt_wr   = fire && req_write && txt_sel && req_wstrb[0]; // req_wstrb = 4'b1111
     assign oled_col_wr   = fire && req_write && col_sel && (req_wstrb[1:0] == 2'b11);
     // =================================================

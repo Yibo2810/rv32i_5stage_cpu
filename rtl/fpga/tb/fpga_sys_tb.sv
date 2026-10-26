@@ -7,6 +7,7 @@ module fpga_sys_tb;
     localparam int          SIM_CPB     = 8;      // UART clocks per bit in sim (board: 217)
     localparam int          SIM_PANIC_PERIOD = 500; // idle cycles between panic lines in sim (board: 1 s)
     localparam int          PANIC_LEN   = 72;     // bytes per halt_reporter line
+    localparam int          SIM_OLED_MS = 10;     // oled_seq: clk per "ms" in sim (board: 25_000)
 
     logic clk = 1'b0;
     logic rst = 1'b1;
@@ -24,6 +25,7 @@ module fpga_sys_tb;
     logic        bus_err;
     logic        uart_txd;
     logic        uart_rxd = 1'b1;   // PC -> FPGA line, idle high; driven by the sender below
+    logic        oled_cs_n, oled_mosi, oled_sclk, oled_dc, oled_res_n, oled_vccen, oled_pmoden;
 
     // ---- TB variables
     string       mem;
@@ -273,7 +275,7 @@ module fpga_sys_tb;
         end
     end
 
-    fpga_sys #(.UART_CLKS_PER_BIT(SIM_CPB), .PANIC_PERIOD(SIM_PANIC_PERIOD)) u_sys (
+    fpga_sys #(.UART_CLKS_PER_BIT(SIM_CPB), .PANIC_PERIOD(SIM_PANIC_PERIOD), .OLED_MS_CYCLES(SIM_OLED_MS)) u_sys (
         .clk         (clk),
         .rst         (rst),
         .halted      (halted),
@@ -287,7 +289,24 @@ module fpga_sys_tb;
         .error_trap  (error_trap),
         .bus_err     (bus_err),
         .uart_txd    (uart_txd),
-        .uart_rxd    (uart_rxd)
+        .uart_rxd    (uart_rxd),
+        .oled_cs_n   (oled_cs_n),
+        .oled_mosi   (oled_mosi),
+        .oled_sclk   (oled_sclk),
+        .oled_dc     (oled_dc),
+        .oled_res_n  (oled_res_n),
+        .oled_vccen  (oled_vccen),
+        .oled_pmoden (oled_pmoden)
+    );
+
+    ssd1331_model u_oled (
+        .cs_n  (oled_cs_n),
+        .sclk  (oled_sclk),
+        .mosi  (oled_mosi),
+        .dc    (oled_dc),
+        .res_n (oled_res_n),
+        .vccen (oled_vccen),
+        .pmoden(oled_pmoden)
     );
 
     uart_rx_model #(.CLKS_PER_BIT(SIM_CPB)) u_rx (

@@ -106,14 +106,14 @@ import peripherals::*;
     logic [7:0]  uart_rx_data;
     logic        uart_rx_err;
 
-    // OLEDrgb
-    logic oled_cs_n,
-    logic oled_mosi,
-    logic oled_sclk,
-    logic oled_dc,
-    logic oled_res_n,
-    logic oled_vccen,
-    logic oled_pmoden
+    // OLED
+    // OLEDrgb COLOR and TXT
+    logic        oled_txt_wr;
+    logic [6:0]  oled_txt_idx;
+    logic [7:0]  oled_txt_data;
+    logic        oled_col_wr;
+    logic [2:0]  oled_col_idx;
+    logic [15:0] oled_col_data;
     
     // ERROR
     logic        dmem_rsp_err;
@@ -241,7 +241,14 @@ import peripherals::*;
         .uart_tx_data(mmio_tx_data),
         .uart_rx_valid(uart_rx_valid),
         .uart_rx_data(uart_rx_data),
-        .uart_rx_err(uart_rx_err)
+        .uart_rx_err(uart_rx_err),
+        // OLEDrgb COLOR and TXT
+        .oled_txt_wr(oled_txt_wr),
+        .oled_txt_idx(oled_txt_idx),
+        .oled_txt_data(oled_txt_data),
+        .oled_col_wr(oled_col_wr),
+        .oled_col_idx(oled_col_idx),
+        .oled_col_data(oled_col_data)
     );
 
     halt_reporter #(.PERIOD(PANIC_PERIOD)) u_panic (
@@ -280,14 +287,32 @@ import peripherals::*;
         .rx(uart_rxd)
     );
 
-    oled_ctrl u_ctrl (
+    oled_ctrl #(.MS_CYCLES(OLED_MS_CYCLES)) u_ctrl (
         .clk(clk),
         .rst(rst),
-        .oled_res_n(oled_res_n),
-        .oled_vccen(oled_vccen),
-        .oled_dc(oled_dc),
+        // Power-on sequence
+        .oled_res_n (oled_res_n),
+        .oled_vccen (oled_vccen),
+        .oled_pmoden(oled_pmoden),
+        // SPI
+        .oled_dc  (oled_dc),
         .oled_mosi(oled_mosi),
         .oled_cs_n(oled_cs_n),
-        .oled_sclk(oled_sclk)
+        .oled_sclk(oled_sclk),
+        // CPU write
+        .oled_txt_wr  (oled_txt_wr),
+        .oled_txt_idx (oled_txt_idx),
+        .oled_txt_data(oled_txt_data),
+        .oled_col_wr  (oled_col_wr),
+        .oled_col_idx (oled_col_idx),
+        .oled_col_data(oled_col_data),
+        // halt
+        .halted      (halted),
+        .trap_cause_q(trap_cause_q),
+        .trap_pc_q   (trap_pc_q),
+        .tohost      (tohost),
+        .pass        (pass),
+        .bus_err     (bus_err),
+        .bus_err_addr(bus_err_addr)
     );
     endmodule

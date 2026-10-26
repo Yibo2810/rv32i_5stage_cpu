@@ -11,7 +11,24 @@ module oled_ctrl
     output logic oled_dc,
     output logic oled_res_n,
     output logic oled_vccen,
-    output logic oled_pmoden
+    output logic oled_pmoden,
+
+    // CPU write charater
+    input logic oled_txt_wr,
+    input logic [6:0] oled_txt_idx,
+    input logic [7:0] oled_txt_data,
+    // CPU write color
+    input logic oled_col_wr,
+    input logic [2:0] oled_col_idx,
+    input logic [15:0] oled_col_data,
+
+    // trap/halt, display when panic
+    input logic halted, pass,
+    input logic [3:0] trap_cause_q,
+    input logic [31:0] trap_pc_q,
+    input logic [31:0] tohost,
+    input logic bus_err,
+    input logic [31:0] bus_err_addr
 );
     logic       done;
     logic       spi_busy;
@@ -27,16 +44,6 @@ module oled_ctrl
     assign spi_valid = done ? f_valid : s_valid;
     assign spi_data  = done ? f_data  : s_data;
     assign spi_dc    = done ? f_dc    : 1'b0;
-
-    oled_fill u_fill (
-        .clk(clk),
-        .rst(rst),
-        .start(done),
-        .spi_busy(spi_busy),
-        .spi_valid(f_valid),
-        .spi_data(f_data),
-        .dc(f_dc)
-    );
 
     oled_seq #(.MS_CYCLES(MS_CYCLES)) u_seq  (
         .clk(clk),
@@ -61,5 +68,30 @@ module oled_ctrl
         .mosi(oled_mosi),
         .cs_n(oled_cs_n),
         .sclk(oled_sclk)
+    );
+
+    oled_render u_render(
+        .clk(clk),
+        .rst(rst),
+        .start(done),
+        .spi_busy(spi_busy),
+        .spi_valid(f_valid),
+        .spi_data(f_data),
+        .dc(f_dc),
+
+        .txt_wr  (oled_txt_wr),
+        .txt_idx (oled_txt_idx),
+        .txt_data(oled_txt_data),
+        .col_wr  (oled_col_wr),
+        .col_idx (oled_col_idx),
+        .col_data(oled_col_data),
+
+        .halted      (halted),
+        .trap_cause_q(trap_cause_q),
+        .trap_pc_q   (trap_pc_q),
+        .tohost      (tohost),
+        .pass        (pass),
+        .bus_err     (bus_err),
+        .bus_err_addr(bus_err_addr)
     );
 endmodule
