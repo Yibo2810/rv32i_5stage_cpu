@@ -3,17 +3,24 @@
 A learning-oriented RV32I CPU project implemented in Verilog and
 SystemVerilog.
 
-**Latest tag: v0.7.1** — reset PC at `0x8000_0000`, one RAM for text and data
-behind an address map (RAM / MMIO / unmapped), integration-tested in
-simulation, board smoke test passed. See
-[docs/14_v0_7_1_milestone.md](docs/14_v0_7_1_milestone.md). The next public
-release is `v1.0`.
+**Latest tag: v0.9** — C programs on the SoC with a UART and a text display.
+Bare-metal C (`crt0`, linker script, `sw/`) runs on the SoC in simulation and
+on the board. A 16550-subset UART (TX and RX, `reg-shift = 2`) prints from C
+on the board and receives in simulation; a hardware panic line (halt cause,
+PC, `tohost`, bus error address) passes in simulation. A Pmod OLEDrgb
+(SSD1331 over SPI) shows a 12 × 8 text screen written from C through MMIO,
+with a hardware status row (RUN / PASS / FAIL) and a panic page; `oled_hello`
+runs on the board. A small TTY echoes UART input to the OLED (`oled_term`,
+passes in simulation). See
+[docs/15_c_runtime_uart_panic.md](docs/15_c_runtime_uart_panic.md) and the
+interactive text-renderer demo,
+[docs/demo/oled_render.html](docs/demo/oled_render.html)
+([中文版](docs/demo/oled_render_zh.html)). The next release is `v1.0`, which
+adds a UART program loader.
 
-**Since v0.7.1 (untagged):** bare-metal C (`crt0`, linker script, `sw/`) runs on
-the SoC in simulation and on the board; a 16550-subset UART TX prints from C on
-the board; a hardware panic line (halt cause, PC, `tohost`, bus error address)
-passes in simulation; a Pmod OLEDrgb driver is under development. See
-[docs/15_c_runtime_uart_panic.md](docs/15_c_runtime_uart_panic.md).
+**v0.7.1** — reset PC at `0x8000_0000`, one RAM for text and data behind an
+address map (RAM / MMIO / unmapped), integration-tested in simulation, board
+smoke test passed. See [docs/14_v0_7_1_milestone.md](docs/14_v0_7_1_milestone.md).
 
 The pipeline has run on an FPGA board since **v0.6.0**: on a Digilent Arty
 A7-100T at 25 MHz, a directed hazard program with a self-checking tail reports
@@ -36,6 +43,22 @@ The single-cycle core verified in **v0.4.0** stays in the tree as the frozen
 baseline, and its regression still passes on the current tree.
 
 ## Current Milestone
+
+**v0.9: C on the SoC, UART, OLED text display — integration-tested in
+simulation, board runs passed for C, UART TX and `oled_hello`**
+
+The memory-mapped I/O region at `0x1000_0000` now holds a 16550-subset UART
+(`+0x000`), the `tohost` register (`+0x100`), a write-only OLED text buffer
+(`+0x200`, one character per word, 8 rows with a stride of 16 words, 12
+visible columns) and one foreground color per row (`+0x400`). The OLED controller runs on its own: a microcoded init sequence,
+then a renderer that scans the screen continuously and looks each pixel up in
+the text buffer and an 8×8 font, so the CPU only writes characters. Row 0 is a
+hardware status row (green RUN, yellow PASS, red FAIL); after a failing halt,
+rows 1–7 show the panic fields instead of the CPU text. Each block has a
+self-checking unit testbench (`make oled-spi-test`, `oled-seq-test`,
+`oled-ctrl-test`, `oled-text-test`, `oled-render-test`, `uart-rx-test`,
+`uart-tx-test`); C programs run end to end in `fpga_sys_tb` with expected UART
+and screen contents (`make c-run PROG=<prog>`).
 
 **v0.7.1: address map and unified memory — integration-tested in
 simulation, board smoke test passed** (see [docs/14_v0_7_1_milestone.md](docs/14_v0_7_1_milestone.md))
@@ -154,8 +177,12 @@ fully green regressions — are documented in
 - [x] Parameterized reset PC (`0x8000_0000`); random programs with text and data in the RAM region
 - [x] Unified RAM + address decoder (RAM / MMIO / unmapped) + `tohost` MMIO, directed `mmap_test` passing in `fpga_sys_tb`
 - [x] SoC (v0.7.1) built in Vivado and run on the board: `mmap_test` reports PASS
+- [x] Bare-metal C runtime (`crt0`, linker script, drivers) in simulation and on the board
+- [x] 16550-subset UART: TX on the board, RX in simulation; hardware panic line in simulation
+- [x] Pmod OLEDrgb text display (init sequence, renderer, MMIO text buffer, status row, panic page); `oled_hello` on the board
 - [ ] Fail-path (negative) test in simulation and on the board
-- [ ] On-board debug visibility (ILA or UART)
+- [x] On-board debug visibility over UART (C output on the board)
+- [ ] UART program loader (v1.0)
 - [ ] Request back-pressure stimulus
 
 ## Verification Summary
@@ -283,7 +310,8 @@ Important files:
 | `rtl/include/single_pkg.sv` | Shared SystemVerilog RV32I constants and control types |
 | `rtl/single_cycle/` | Current verified single-cycle CPU RTL |
 | `rtl/pipeline/` | Five-stage pipeline RTL: `{if,id,ex,mem,wb}_stage.sv`, `pipeline_regs.sv`, `hazard_unit.sv`, `forwarding_unit.sv`, `core_5stage.sv`, `memory/dmem_bram.sv` (see [docs/03_pipeline_design.md](docs/03_pipeline_design.md)) |
-| `rtl/fpga/rtl/` | Portable FPGA system: `fpga_sys.sv` (core + RAM + decoder + trap latch + pass/fail), `sys_ram.sv` (one block RAM, fetch port + data port), `dmem_xbar.sv` (RAM / MMIO / unmapped decode), `mmio_regs.sv` (`tohost` + UART registers), `halt_reporter.sv` (hardware panic line), `uart/` (16550 subset, `uart_tx`), `oled/` (Pmod OLEDrgb, under development) |
+| `rtl/fpga/rtl/` | Portable FPGA system: `fpga_sys.sv` (core + RAM + decoder + trap latch + pass/fail), `sys_ram.sv` (one block RAM, fetch port + data port), `dmem_xbar.sv` (RAM / MMIO / unmapped decode), `mmio_regs.sv` (`tohost` + UART registers), `halt_reporter.sv` (hardware panic line), `uart/` (16550 subset, `uart_tx`, `uart_rx`), `oled/` (Pmod OLEDrgb: SPI, init sequence, text buffer, font, renderer), `include/peripherals.sv` (MMIO map and register constants) |
+| `docs/demo/` | Interactive page that steps through the OLED text renderer byte by byte (`oled_render.html`, Chinese: `oled_render_zh.html`) |
 | `sw/` | Bare-metal C: `common/{rt,drv,lib}` (start-up, linker script, drivers, print) and `programs/<prog>/`; `make c-run PROG=<prog>`, `make c-spike PROG=<prog>` |
 | `programs/fpga/asm/` | System-level test programs linked at `0x8000_0000` (`mmap_test.S`) |
 | `rtl/fpga/arty_a7/` | Arty A7-100T board wrapper (`arty_a7_top.sv`: MMCM, reset synchronizer, LED views) and pin constraints (`arty_a7.xdc`) |
@@ -479,9 +507,10 @@ Documented in detail in
    data in the RAM region, SoC on the board~~ **(v0.7.1: integration-tested in
    simulation, board smoke test passed)**; next the fail path and a Spike
    cross-check.
-   **After v0.7.1:** C runtime and UART TX on the board, hardware panic in
-   simulation, OLEDrgb under development; next UART RX + loader
-   ([docs/15](docs/15_c_runtime_uart_panic.md)).
+   ~~**v0.9:** C runtime and UART TX on the board, UART RX and hardware panic
+   in simulation, OLEDrgb text display on the board~~ **Done
+   ([docs/15](docs/15_c_runtime_uart_panic.md)).** Next: a UART program
+   loader for **v1.0**.
 7. Peripherals on a bus (UART, timer), interrupts with CSRs and trap handling,
    caches, external memory; an external ISA reference (riscv-arch-test, Spike
    or Sail).

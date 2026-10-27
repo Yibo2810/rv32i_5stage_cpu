@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>oled_render 扫描器</title>
+<title>oled_render Scanner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
@@ -40,6 +40,7 @@
 html { color-scheme: light dark; }
 body { margin: 0; }
 img { max-width: 100%; }
+a { color: var(--xbit); }
 [hidden] { display: none !important; }
 body {
   background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.5;
@@ -153,52 +154,53 @@ button.primary { background: var(--ink); color: var(--panel); border-color: var(
 <body>
 <div class="wrap">
   <header>
-    <h1>oled_render 扫描器</h1>
-    <p>屏幕左上角开始，一个字节一个字节往下扫。每按一次“下一个字节”，就是 RTL 里一次 <span class="mono">spi_valid &amp;&amp; !spi_busy</span> 交接。右边按连线顺序显示这个字节是怎么一步步算出来的。点屏幕上任意一点，扫描器会跳到那里。</p>
+    <h1>oled_render Scanner</h1>
+    <p class="hint" style="margin:2px 0 0"><a href="oled_render_zh.html">中文版</a></p>
+    <p>The scan starts at the top-left of the screen and walks forward one byte at a time. Each press of “Next byte” is one <span class="mono">spi_valid &amp;&amp; !spi_busy</span> handshake in the RTL. The right side shows, in wiring order, how that byte is computed. Click anywhere on the screen to jump the scanner there.</p>
   </header>
 
   <div class="bench">
-    <section class="card" aria-label="OLED 屏幕和控制">
+    <section class="card" aria-label="OLED screen and controls">
       <div class="device">
-        <canvas id="scr" width="768" height="512" aria-label="96 乘 64 像素的 OLED 屏幕模拟"></canvas>
-        <div class="devfoot"><span id="dev-l">96 × 64 · 8×8 字格 · 12 列 × 8 行</span><span id="dev-r"></span></div>
+        <canvas id="scr" width="768" height="512" aria-label="Simulated 96 by 64 pixel OLED screen"></canvas>
+        <div class="devfoot"><span id="dev-l">96 × 64 · 8×8 cells · 12 columns × 8 rows</span><span id="dev-r"></span></div>
       </div>
       <div class="controls">
-        <button id="b-byte" class="primary" title="快捷键 →">下一个字节</button>
-        <button id="b-pix" title="快捷键 Shift + →">下一个像素</button>
-        <button id="b-line">下一行像素</button>
-        <button id="b-cell">走完这一格</button>
-        <button id="b-play" title="快捷键 空格">播放</button>
-        <button id="b-reset">从帧头开始</button>
+        <button id="b-byte" class="primary" title="Shortcut →">Next byte</button>
+        <button id="b-pix" title="Shortcut Shift + →">Next pixel</button>
+        <button id="b-line">Next pixel line</button>
+        <button id="b-cell">Finish this cell</button>
+        <button id="b-play" title="Shortcut Space">Play</button>
+        <button id="b-reset">Restart frame</button>
       </div>
       <div class="controls">
-        <div class="speed"><span class="label">速度</span><input id="spd" type="range" min="0" max="6" step="1" value="2" aria-label="播放速度"><span id="spd-t" class="mono hint"></span></div>
-        <div class="seg" role="group" aria-label="CPU 状态">
+        <div class="speed"><span class="label">Speed</span><input id="spd" type="range" min="0" max="6" step="1" value="2" aria-label="Playback speed"><span id="spd-t" class="mono hint"></span></div>
+        <div class="seg" role="group" aria-label="CPU state">
           <button id="m-run" aria-pressed="true">RUN</button>
           <button id="m-pass" aria-pressed="false">PASS</button>
           <button id="m-fail" aria-pressed="false">FAIL</button>
         </div>
       </div>
-      <p class="hint" style="margin:8px 0 0">改了状态或文字之后，屏上不会立刻变：要等扫描器扫到那里，新像素才写进屏。这和真屏一样，屏只显示最后一次收到的像素。</p>
+      <p class="hint" style="margin:8px 0 0">After you change the state or the text, the screen does not change at once: new pixels are written only when the scanner reaches them. Same as the real panel, which shows the last pixels it received.</p>
     </section>
 
-    <section class="card" aria-label="渲染数据通路">
-      <h2>这个字节怎么来的 <span class="tag" id="phase-tag"></span></h2>
+    <section class="card" aria-label="Render datapath">
+      <h2>Where this byte comes from <span class="tag" id="phase-tag"></span></h2>
 
       <div class="stage" id="st1">
         <div class="no">①</div>
         <div class="body">
-          <div class="title">计数器（寄存器） <span class="mono">phase / cnt / x / y / lo</span></div>
+          <div class="title">Counters (registers) <span class="mono">phase / cnt / x / y / lo</span></div>
           <div class="kv" id="cnts"></div>
-          <div class="kv"><span>x =</span><span class="bits" id="xbits"></span><span class="hint">高 4 位 → <span class="x">col</span>，低 3 位 → <span class="x">gx</span></span></div>
-          <div class="kv"><span>y =</span><span class="bits" id="ybits"></span><span class="hint">高 3 位 → <span class="y">row</span>，低 3 位 → <span class="y">gy</span></span></div>
+          <div class="kv"><span>x =</span><span class="bits" id="xbits"></span><span class="hint">upper 4 bits → <span class="x">col</span>, lower 3 bits → <span class="x">gx</span></span></div>
+          <div class="kv"><span>y =</span><span class="bits" id="ybits"></span><span class="hint">upper 3 bits → <span class="y">row</span>, lower 3 bits → <span class="y">gy</span></span></div>
         </div>
       </div>
 
       <div class="stage" id="st2">
         <div class="no">②</div>
         <div class="body">
-          <div class="title">拆位：在哪一格、格子里哪一点 <span class="mono">纯连线，不花逻辑</span></div>
+          <div class="title">Bit split: which cell, which dot in the cell <span class="mono">wires only, no logic</span></div>
           <div class="kv" id="split"></div>
         </div>
       </div>
@@ -206,7 +208,7 @@ button.primary { background: var(--ink); color: var(--panel); border-color: var(
       <div class="stage" id="st3">
         <div class="no">③</div>
         <div class="body">
-          <div class="title">oled_text：第 <span id="t-row" class="y"></span> 行这一整行是什么 <span class="mono">(row, col) → ch, fg, bg</span></div>
+          <div class="title">oled_text: what row <span id="t-row" class="y"></span> holds <span class="mono">(row, col) → ch, fg, bg</span></div>
           <div class="rowstr" id="rowstr"></div>
           <div class="kv" id="textout"></div>
           <div class="hint" id="cellcount"></div>
@@ -216,13 +218,13 @@ button.primary { background: var(--ink); color: var(--panel); border-color: var(
       <div class="stage" id="st4">
         <div class="no">④</div>
         <div class="body">
-          <div class="title">oled_font：这个字的第 <span id="f-gy" class="y"></span> 行 <span class="mono">(ch, gy) → bits</span></div>
+          <div class="title">oled_font: line <span id="f-gy" class="y"></span> of this glyph <span class="mono">(ch, gy) → bits</span></div>
           <div class="glyphbox">
-            <div class="glyph" id="glyph" aria-label="当前字符的 8×8 字形"></div>
+            <div class="glyph" id="glyph" aria-label="8×8 glyph of the current character"></div>
             <div style="display:grid;gap:6px;min-width:0">
               <div class="kv" id="fontout"></div>
               <div class="kv"><span>bits =</span><span class="bits" id="bitsrow"></span></div>
-              <div class="hint">屏幕上从左到右是 bit0 → bit7（font8x8 的约定）。取 <span class="mono">bits[<span class="x">gx</span>]</span>。</div>
+              <div class="hint">On screen, left to right is bit0 → bit7 (the font8x8 convention). Take <span class="mono">bits[<span class="x">gx</span>]</span>。</div>
             </div>
           </div>
         </div>
@@ -231,7 +233,7 @@ button.primary { background: var(--ink); color: var(--panel); border-color: var(
       <div class="stage" id="st5">
         <div class="no">⑤</div>
         <div class="body">
-          <div class="title">选颜色 <span class="mono">pix = bits[gx] ? fg : bg</span></div>
+          <div class="title">Pick the color <span class="mono">pix = bits[gx] ? fg : bg</span></div>
           <div class="choice" id="choice"></div>
         </div>
       </div>
@@ -239,7 +241,7 @@ button.primary { background: var(--ink); color: var(--panel); border-color: var(
       <div class="stage" id="st6">
         <div class="no">⑥</div>
         <div class="body">
-          <div class="title">发出去的字节 <span class="mono">dc / spi_data</span></div>
+          <div class="title">Byte sent out <span class="mono">dc / spi_data</span></div>
           <div id="winrow" class="win"></div>
           <div class="choice" id="hilo"></div>
           <div class="out" id="out"></div>
@@ -250,25 +252,25 @@ button.primary { background: var(--ink); color: var(--panel); border-color: var(
 
   <div class="lower">
     <section class="card">
-      <h2>交接之后计数器怎么走 <span class="tag">always_ff，只在交接那拍</span></h2>
+      <h2>How the counters move after a handshake <span class="tag">always_ff, only on the handshake cycle</span></h2>
       <ul class="rules" id="rules">
-        <li data-r="w1">WIN 且 cnt &lt; 5 → cnt + 1</li>
-        <li data-r="w2">WIN 且 cnt == 5 → 进入 PIX，x = y = 0，lo = 0</li>
-        <li data-r="p1">PIX 且 lo == 0 → lo = 1（刚发完高字节）</li>
-        <li data-r="p2">PIX 且 lo == 1 且 x &lt; 95 → x + 1，lo = 0</li>
-        <li data-r="p3">PIX 且 lo == 1 且 x == 95 且 y &lt; 63 → x = 0，y + 1，lo = 0</li>
-        <li data-r="p4">PIX 且 lo == 1 且 x == 95 且 y == 63 → 回到 WIN，cnt = 0（一帧结束）</li>
+        <li data-r="w1">WIN and cnt &lt; 5 → cnt + 1</li>
+        <li data-r="w2">WIN and cnt == 5 → enter PIX, x = y = 0, lo = 0</li>
+        <li data-r="p1">PIX and lo == 0 → lo = 1 (high byte just sent)</li>
+        <li data-r="p2">PIX and lo == 1 and x &lt; 95 → x + 1, lo = 0</li>
+        <li data-r="p3">PIX and lo == 1 and x == 95 and y &lt; 63 → x = 0, y + 1, lo = 0</li>
+        <li data-r="p4">PIX and lo == 1 and x == 95 and y == 63 → back to WIN, cnt = 0 (end of frame)</li>
       </ul>
-      <p class="note">像素在发完低字节的那一拍才算写进屏。一帧 = 6 个窗口字节 + 96 × 64 × 2 = 12294 个字节。</p>
+      <p class="note">A pixel counts as written only on the cycle its low byte is sent. One frame = 6 window bytes + 96 × 64 × 2 = 12294 bytes.</p>
     </section>
 
     <section class="card">
-      <h2>最近发出的字节 <span class="tag">最新在上</span></h2>
+      <h2>Recently sent bytes <span class="tag">newest first</span></h2>
       <div class="log" id="log" aria-live="off"></div>
     </section>
 
     <section class="card">
-      <h2>屏上显示的内容 <span class="tag">喂给 oled_text 的数据</span></h2>
+      <h2>What the screen shows <span class="tag">data fed to oled_text</span></h2>
       <div class="form" id="cpuform"></div>
       <p class="note" id="cpunote"></p>
       <div class="form" id="panicform" style="margin-top:6px"></div>
@@ -276,16 +278,16 @@ button.primary { background: var(--ink); color: var(--panel); border-color: var(
   </div>
 
   <section class="card why">
-    <h2>看的时候抓住这三件事</h2>
-    <p><b>主动权在计数器。</b>oled_text 和字库都是纯组合逻辑，自己不知道“现在画到哪了”。每一拍，渲染器拿着当前的 <span class="mono">x、y</span> 去问它们，它们当拍回答。</p>
-    <p><b>同一个格子会被连续问很多次。</b>扫过一行像素时，<span class="mono x">col</span> 每 8 个点才变一次；一个字要扫 8 行像素才画完，所以每个格子一帧里被问 64 次，每次 <span class="mono x">gx</span>、<span class="mono y">gy</span> 不同，取的是字形里不同的点。用“走完这一格”看最清楚。</p>
-    <p><b>每个点要发两个字节。</b><span class="mono">lo = 0</span> 发 <span class="mono">pix[15:8]</span>，<span class="mono">lo = 1</span> 发 <span class="mono">pix[7:0]</span>，第二个字节发完 x 才加一。</p>
+    <h2>Three things to watch for</h2>
+    <p><b>The counters are in charge.</b> oled_text and the font are pure combinational logic; they do not know where the drawing is. Every cycle the renderer asks them with the current <span class="mono">x, y</span>, and they answer in the same cycle.</p>
+    <p><b>The same cell is asked many times.</b> Along a pixel line, <span class="mono x">col</span> changes only every 8 dots, and a character takes 8 pixel lines to finish, so each cell is asked 64 times per frame. Each time <span class="mono x">gx</span> and <span class="mono y">gy</span> differ and pick a different dot of the glyph. “Finish this cell” shows it best.</p>
+    <p><b>Each dot takes two bytes.</b> <span class="mono">lo = 0</span> sends <span class="mono">pix[15:8]</span>, <span class="mono">lo = 1</span> sends <span class="mono">pix[7:0]</span>, and x advances only after the second byte.</p>
   </section>
 </div>
 
 
 <footer class="wrap" style="margin-top:16px">
-  <p class="note">对应 RTL：<span class="mono">rtl/fpga/rtl/oled/oled_render.sv</span>、<span class="mono">oled_text.sv</span>、<span class="mono">oled_font.sv</span>。页面里的计数器规则和取位方式与这几个模块一致；RTL 改动后，这个页面需要同步更新。</p>
+  <p class="note">Matching RTL: <span class="mono">rtl/fpga/rtl/oled/oled_render.sv</span>, <span class="mono">oled_text.sv</span>, <span class="mono">oled_font.sv</span>. The counter rules and bit selection on this page follow those modules; when the RTL changes, this page must be updated too.</p>
 </footer>
 <script>
 const FONT=[[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[54,127,127,127,62,28,8,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[24,60,60,24,24,0,24,0],[54,54,0,0,0,0,0,0],[54,54,127,54,127,54,54,0],[12,62,3,30,48,31,12,0],[0,99,51,24,12,102,99,0],[28,54,28,110,59,51,110,0],[6,6,3,0,0,0,0,0],[24,12,6,6,6,12,24,0],[6,12,24,24,24,12,6,0],[0,102,60,255,60,102,0,0],[0,12,12,63,12,12,0,0],[0,0,0,0,0,12,12,6],[0,0,0,63,0,0,0,0],[0,0,0,0,0,12,12,0],[96,48,24,12,6,3,1,0],[62,99,115,123,111,103,62,0],[12,14,12,12,12,12,63,0],[30,51,48,28,6,51,63,0],[30,51,48,28,48,51,30,0],[56,60,54,51,127,48,120,0],[63,3,31,48,48,51,30,0],[28,6,3,31,51,51,30,0],[63,51,48,24,12,12,12,0],[30,51,51,30,51,51,30,0],[30,51,51,62,48,24,14,0],[0,12,12,0,0,12,12,0],[0,12,12,0,0,12,12,6],[24,12,6,3,6,12,24,0],[0,0,63,0,0,63,0,0],[6,12,24,48,24,12,6,0],[30,51,48,24,12,0,12,0],[62,99,123,123,123,3,30,0],[12,30,51,51,63,51,51,0],[63,102,102,62,102,102,63,0],[60,102,3,3,3,102,60,0],[31,54,102,102,102,54,31,0],[127,70,22,30,22,70,127,0],[127,70,22,30,22,6,15,0],[60,102,3,3,115,102,124,0],[51,51,51,63,51,51,51,0],[30,12,12,12,12,12,30,0],[120,48,48,48,51,51,30,0],[103,102,54,30,54,102,103,0],[15,6,6,6,70,102,127,0],[99,119,127,127,107,99,99,0],[99,103,111,123,115,99,99,0],[28,54,99,99,99,54,28,0],[63,102,102,62,6,6,15,0],[30,51,51,51,59,30,56,0],[63,102,102,62,54,102,103,0],[30,51,7,14,56,51,30,0],[63,45,12,12,12,12,30,0],[51,51,51,51,51,51,63,0],[51,51,51,51,51,30,12,0],[99,99,99,107,127,119,99,0],[99,99,54,28,28,54,99,0],[51,51,51,30,12,12,30,0],[127,99,49,24,76,102,127,0],[30,6,6,6,6,6,30,0],[3,6,12,24,48,96,64,0],[30,24,24,24,24,24,30,0],[8,28,54,99,0,0,0,0],[0,0,0,0,0,0,0,255],[12,12,24,0,0,0,0,0],[0,0,30,48,62,51,110,0],[7,6,6,62,102,102,59,0],[0,0,30,51,3,51,30,0],[56,48,48,62,51,51,110,0],[0,0,30,51,63,3,30,0],[28,54,6,15,6,6,15,0],[0,0,110,51,51,62,48,31],[7,6,54,110,102,102,103,0],[12,0,14,12,12,12,30,0],[48,0,48,48,48,51,51,30],[7,6,102,54,30,54,103,0],[14,12,12,12,12,12,30,0],[0,0,51,127,127,107,99,0],[0,0,31,51,51,51,51,0],[0,0,30,51,51,51,30,0],[0,0,59,102,102,62,6,15],[0,0,110,51,51,62,48,120],[0,0,59,110,102,6,15,0],[0,0,62,3,30,48,31,0],[8,12,62,12,12,44,24,0],[0,0,51,51,51,51,110,0],[0,0,51,51,51,30,12,0],[0,0,99,107,127,127,54,0],[0,0,99,54,28,54,99,0],[0,0,51,51,51,62,48,31],[0,0,63,25,12,38,63,0],[56,12,12,7,12,12,56,0],[24,24,24,0,24,24,24,0],[7,12,12,56,12,12,7,0],[110,59,0,0,0,0,0,0],[0,0,0,0,0,0,0,0]];
@@ -336,8 +338,8 @@ function rowCodes(r) {
   return panicRow(r);
 }
 function rowSource(r) {
-  if (r === 0) return "状态行（硬件）";
-  return cfg.mode !== "FAIL" ? "CPU 写的 txt[]" : "panic_row()";
+  if (r === 0) return "status row (hardware)";
+  return cfg.mode !== "FAIL" ? "txt[] written by the CPU" : "panic_row()";
 }
 function rowColors(r) {
   if (r === 0) return { fg: RGB.BLACK, bg: cfg.mode === "RUN" ? RGB.GREEN : cfg.mode === "PASS" ? RGB.YELLOW : RGB.RED };
@@ -368,7 +370,7 @@ function nextRule() {
 }
 function step() {
   const c = current();
-  const desc = st.phase === "WIN" ? `窗口 cnt=${st.cnt}` : `(${st.x},${st.y}) ${st.lo ? "低" : "高"}字节`;
+  const desc = st.phase === "WIN" ? `window cnt=${st.cnt}` : `(${st.x},${st.y}) ${st.lo ? "low" : "high"} byte`;
   log.unshift({ n: frameBytes, dc: c.dc, data: c.data, desc });
   if (log.length > 40) log.pop();
   frameBytes++;
@@ -427,22 +429,22 @@ function bitsHTML(v, n, hiCls, hiN, loCls) {
   return s;
 }
 function chLabel(ch) {
-  if (ch === 0) return "0x00（空）";
+  if (ch === 0) return "0x00 (empty)";
   if (ch === 3) return "0x03 ♥";
   if (ch === 32) return "0x20 ' '";
   return `0x${hex(ch, 2)} '${String.fromCharCode(ch)}'`;
 }
 function renderPanel() {
   const c = current(), win = st.phase === "WIN";
-  $("phase-tag").textContent = win ? "窗口阶段：发 6 个命令字节，D/C = 0" : "像素阶段：D/C = 1";
+  $("phase-tag").textContent = win ? "window phase: 6 command bytes, D/C = 0" : "pixel phase: D/C = 1";
   $("cnts").innerHTML = `<span>phase = <b>${st.phase}</b></span><span>cnt = <b>${st.cnt}</b></span><span>x = <b class="x">${st.x}</b></span><span>y = <b class="y">${st.y}</b></span><span>lo = <b class="cur">${st.lo}</b></span>`;
   $("xbits").innerHTML = bitsHTML(st.x, 7, "bx", 4, "bx");
   $("ybits").innerHTML = bitsHTML(st.y, 6, "by", 3, "by");
   ["st2", "st3", "st4", "st5"].forEach(id => $(id).classList.toggle("idle", win));
   const winRow = $("winrow");
-  winRow.innerHTML = win ? WIN.map((b, i) => `<span class="${i < st.cnt ? "done" : i === st.cnt ? "pick" : ""}">${hex(b, 2).toUpperCase()}</span>`).join("") + `<span class="hint" style="border:0">15 00 5F = 列 0..95，75 00 3F = 行 0..63</span>` : "";
+  winRow.innerHTML = win ? WIN.map((b, i) => `<span class="${i < st.cnt ? "done" : i === st.cnt ? "pick" : ""}">${hex(b, 2).toUpperCase()}</span>`).join("") + `<span class="hint" style="border:0">15 00 5F = columns 0..95, 75 00 3F = rows 0..63</span>` : "";
   if (win) {
-    $("split").innerHTML = `<span class="hint">窗口阶段不查表</span>`;
+    $("split").innerHTML = `<span class="hint">no lookup in the window phase</span>`;
     $("rowstr").innerHTML = ""; $("textout").innerHTML = ""; $("cellcount").textContent = "";
     $("glyph").innerHTML = ""; $("fontout").innerHTML = ""; $("bitsrow").innerHTML = "";
     $("choice").innerHTML = ""; $("hilo").innerHTML = "";
@@ -452,9 +454,9 @@ function renderPanel() {
     $("t-row").textContent = c.row;
     $("rowstr").innerHTML = c.codes.map((ch, i) => `<div class="${i === c.col ? "hl" : ""}">${ch === 0 ? "·" : ch === 3 ? "♥" : ch === 32 ? "␣" : String.fromCharCode(ch)}<i>${i}</i></div>`).join("");
     const lsb = 8 * (11 - c.col);
-    $("textout").innerHTML = `<span>来源：${rowSource(c.row)}</span><span>ch = s[8*(11-${c.col}) +: 8] = s[${lsb + 7}:${lsb}] = <b class="cur">${chLabel(c.ch)}</b></span><span>fg <span class="sw" style="background:${css565(c.fg)}"></span> ${hex(c.fg, 4)}</span><span>bg <span class="sw" style="background:${css565(c.bg)}"></span> ${hex(c.bg, 4)}</span>`;
+    $("textout").innerHTML = `<span>source: ${rowSource(c.row)}</span><span>ch = s[8*(11-${c.col}) +: 8] = s[${lsb + 7}:${lsb}] = <b class="cur">${chLabel(c.ch)}</b></span><span>fg <span class="sw" style="background:${css565(c.fg)}"></span> ${hex(c.fg, 4)}</span><span>bg <span class="sw" style="background:${css565(c.bg)}"></span> ${hex(c.bg, 4)}</span>`;
     const done = c.gy * 8 + c.gx;
-    $("cellcount").textContent = `这一格（row ${c.row}, col ${c.col}）本帧已经画了 ${done} / 64 个点；现在是第 ${done + 1} 个。`;
+    $("cellcount").textContent = `This cell (row ${c.row}, col ${c.col}) has ${done} / 64 dots drawn this frame; this is dot ${done + 1}.`;
     $("f-gy").textContent = c.gy;
     let gh = `<div class="h"></div>`;
     for (let b = 0; b < 8; b++) gh += `<div class="h ${b === c.gx ? "xgx" : ""}">${b}</div>`;
@@ -471,23 +473,23 @@ function renderPanel() {
     $("choice").innerHTML = `<span>bits[<span class="x">${c.gx}</span>] = <b>${c.on}</b> →</span><span class="opt ${c.on ? "pick" : ""}">fg <span class="sw" style="background:${css565(c.fg)}"></span></span><span class="opt ${c.on ? "" : "pick"}">bg <span class="sw" style="background:${css565(c.bg)}"></span></span><span>pix = 16'h${hex(c.pix, 4)}</span>`;
     $("hilo").innerHTML = `<span>lo = <b class="cur">${st.lo}</b> →</span><span class="bytes2"><span class="${st.lo ? "" : "pick"}">pix[15:8] = ${hex(c.pix >> 8, 2).toUpperCase()}</span><span class="${st.lo ? "pick" : ""}">pix[7:0] = ${hex(c.pix & 255, 2).toUpperCase()}</span></span>`;
   }
-  $("out").innerHTML = `dc = <b>${c.dc}</b>　spi_data = <b class="cur">8'h${hex(c.data, 2).toUpperCase()}</b>`;
+  $("out").innerHTML = `dc = <b>${c.dc}</b>&nbsp;&nbsp;spi_data = <b class="cur">8'h${hex(c.data, 2).toUpperCase()}</b>`;
   const r = nextRule();
   document.querySelectorAll("#rules li").forEach(li => li.classList.toggle("fire", li.dataset.r === r));
-  $("log").innerHTML = log.length ? log.slice(0, 24).map(e => `<div><span class="m">#${e.n}</span><span>dc=${e.dc}</span><span>${hex(e.data, 2).toUpperCase()}</span><span class="m">${e.desc}</span></div>`).join("") : `<div class="m">还没发字节。按“下一个字节”。</div>`;
-  $("dev-r").textContent = `第 ${frames + 1} 帧 · 本帧 ${frameBytes} / 12294 字节`;
+  $("log").innerHTML = log.length ? log.slice(0, 24).map(e => `<div><span class="m">#${e.n}</span><span>dc=${e.dc}</span><span>${hex(e.data, 2).toUpperCase()}</span><span class="m">${e.desc}</span></div>`).join("") : `<div class="m">No bytes sent yet. Press “Next byte”.</div>`;
+  $("dev-r").textContent = `frame ${frames + 1} · ${frameBytes} / 12294 bytes this frame`;
 }
 
 /* ---------- controls ---------- */
 let playing = false, acc = 0, last = 0;
 const SPEEDS = [
-  { t: "每秒 2 个字节", per: 0, ms: 500 },
-  { t: "每秒 6 个字节", per: 0, ms: 160 },
-  { t: "每帧 2 个字节", per: 2 },
-  { t: "每帧 16 个字节", per: 16 },
-  { t: "每帧一行像素", per: 192 },
-  { t: "每帧一行字", per: 1536 },
-  { t: "每帧一整屏", per: 12294 },
+  { t: "2 bytes per second", per: 0, ms: 500 },
+  { t: "6 bytes per second", per: 0, ms: 160 },
+  { t: "2 bytes per animation frame", per: 2 },
+  { t: "16 bytes per animation frame", per: 16 },
+  { t: "one pixel line per animation frame", per: 192 },
+  { t: "one text row per animation frame", per: 1536 },
+  { t: "a whole screen per animation frame", per: 12294 },
 ];
 function speed() { return SPEEDS[+$("spd").value]; }
 $("spd-t").textContent = speed().t;
@@ -499,7 +501,7 @@ function loop(ts) {
   else if (ts - last >= sp.ms) { last = ts; step(); draw(); }
   requestAnimationFrame(loop);
 }
-function setPlay(p) { playing = p; $("b-play").textContent = p ? "暂停" : "播放"; if (p) requestAnimationFrame(loop); }
+function setPlay(p) { playing = p; $("b-play").textContent = p ? "Pause" : "Play"; if (p) requestAnimationFrame(loop); }
 $("b-play").onclick = () => setPlay(!playing);
 $("b-byte").onclick = () => { setPlay(false); step(); draw(); };
 $("b-pix").onclick = () => { setPlay(false); const ph = st.phase; if (ph === "WIN") { while (st.phase === "WIN") step(); } else { step(); if (st.lo === 1) step(); } draw(); };
@@ -530,9 +532,9 @@ document.addEventListener("keydown", e => {
 function setMode(m) {
   cfg.mode = m;
   [["RUN", "m-run"], ["PASS", "m-pass"], ["FAIL", "m-fail"]].forEach(([k, id]) => $(id).setAttribute("aria-pressed", String(k === m)));
-  $("cpunote").textContent = m === "RUN"  ? "RUN：第 1–7 行显示 CPU 写进 txt[] 的字，每行一个颜色（row_fg）。♥ 是字库里的 0x03。"
-                          : m === "PASS" ? "PASS 停机：只有第 0 行变成黄色 PASS，第 1–7 行照旧显示 CPU 写的字（oled_text: !halted || pass）。"
-                          :                "FAIL 停机：第 1–7 行被 panic_row() 换掉，CPU 写的字还在 txt[] 里，只是不显示。";
+  $("cpunote").textContent = m === "RUN"  ? "RUN: rows 1–7 show the text the CPU wrote into txt[], one color per row (row_fg). ♥ is 0x03 in the font."
+                          : m === "PASS" ? "PASS halt: only row 0 turns into a yellow PASS; rows 1–7 keep showing the CPU text (oled_text: !halted || pass)."
+                          :                "FAIL halt: rows 1–7 are replaced by panic_row(); the CPU text is still in txt[], just not shown.";
   renderPanel();
 }
 $("m-run").onclick = () => setMode("RUN");
@@ -540,16 +542,16 @@ $("m-pass").onclick = () => { cfg.tohost = 1; cfg.buserr = 0; cfg.cause = 3; cfg
 $("m-fail").onclick = () => { cfg.cause = 2; cfg.pc = 0x800000ac; cfg.tohost = 0; cfg.buserr = 1; cfg.addr = 0x2000000f; syncPanicForm(); setMode("FAIL"); };
 
 function buildForms() {
-  let h = `<div class="label">CPU 写的字（第 1–7 行，最多 12 个字符）</div>`;
+  let h = `<div class="label">CPU text (rows 1–7, up to 12 characters)</div>`;
   for (let r = 1; r < 8; r++) {
-    h += `<div class="r"><span class="mono hint">row ${r}</span><input type="text" id="cpu-${r}" maxlength="16" value="${cfg.cpu[r].replace(/"/g, "&quot;")}" aria-label="第 ${r} 行文字"><select id="cc-${r}" aria-label="第 ${r} 行颜色">${COLOR_NAMES.map(n => `<option ${n === cfg.cpuColor[r] ? "selected" : ""}>${n}</option>`).join("")}</select></div>`;
+    h += `<div class="r"><span class="mono hint">row ${r}</span><input type="text" id="cpu-${r}" maxlength="16" value="${cfg.cpu[r].replace(/"/g, "&quot;")}" aria-label="Row ${r} text"><select id="cc-${r}" aria-label="Row ${r} color">${COLOR_NAMES.map(n => `<option ${n === cfg.cpuColor[r] ? "selected" : ""}>${n}</option>`).join("")}</select></div>`;
   }
   $("cpuform").innerHTML = h;
   for (let r = 1; r < 8; r++) {
     $("cpu-" + r).addEventListener("input", e => { cfg.cpu[r] = e.target.value; renderPanel(); });
     $("cc-" + r).addEventListener("change", e => { cfg.cpuColor[r] = e.target.value; renderPanel(); });
   }
-  $("panicform").innerHTML = `<div class="label">halt 时的信息（panic_row 用，只在 FAIL 时上屏）</div>
+  $("panicform").innerHTML = `<div class="label">Halt info (used by panic_row, shown only on FAIL)</div>
     <div class="p"><span class="mono hint">cause</span><input type="text" id="p-cause" maxlength="1" aria-label="cause"></div>
     <div class="p"><span class="mono hint">pc</span><input type="text" id="p-pc" maxlength="8" aria-label="pc"></div>
     <div class="p"><span class="mono hint">tohost</span><input type="text" id="p-toh" maxlength="8" aria-label="tohost"></div>

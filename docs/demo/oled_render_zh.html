@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>oled_render 扫描器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: an instrument bench. The OLED panel sits left like the device under test; the
+   render datapath reads top-to-bottom on the right, stage by stage, the way the RTL wires it. */
+:root {
+  --bg: #eceff2;
+  --panel: #ffffff;
+  --ink: #18212b;
+  --muted: #5d6877;
+  --line: #d3d9e0;
+  --soft: #f4f6f8;
+  --cursor: #c86a00;
+  --xbit: #0b8580;
+  --ybit: #a8367f;
+  --ok: #2f7d3b;
+  --font-body: "IBM Plex Sans", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-head: "IBM Plex Sans Condensed", "IBM Plex Sans", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161c; --panel: #192028; --ink: #e3e8ee; --muted: #8e99a8; --line: #2b343f;
+    --soft: #141a21; --cursor: #f2a640; --xbit: #3ec7bf; --ybit: #e17cc6; --ok: #6cc07a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161c; --panel: #192028; --ink: #e3e8ee; --muted: #8e99a8; --line: #2b343f;
+  --soft: #141a21; --cursor: #f2a640; --xbit: #3ec7bf; --ybit: #e17cc6; --ok: #6cc07a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; }
+img { max-width: 100%; }
+a { color: var(--xbit); }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 16px; }
+header h1 { font-family: var(--font-head); font-weight: 600; font-size: 1.7rem; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.x { color: var(--xbit); font-weight: 600; }
+.y { color: var(--ybit); font-weight: 600; }
+.cur { color: var(--cursor); font-weight: 600; }
+
+.bench { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+.card h2 { font-family: var(--font-head); font-weight: 600; font-size: 1rem; margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; }
+.card h2 .tag { font-family: var(--font-mono); font-weight: 500; font-size: .78rem; color: var(--muted); }
+.label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+
+/* the device */
+.device { background: #0b0d10; border-radius: 10px; padding: 14px; border: 1px solid #000; }
+.device canvas { display: block; width: 100%; max-width: 100%; height: auto; image-rendering: pixelated; cursor: crosshair; border-radius: 2px; }
+.devfoot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; color: #9aa3ad; font-family: var(--font-mono); font-size: .75rem; margin-top: 8px; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+button, select, input[type="text"] {
+  font: inherit; color: var(--ink); background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px;
+}
+button { cursor: pointer; font-weight: 500; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--cursor); outline-offset: 1px; }
+button.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: var(--panel); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.speed { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.speed input { width: 140px; }
+.hint { color: var(--muted); font-size: .8rem; }
+
+/* datapath stages */
+.stage { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr); gap: 10px; padding: 10px 0; border-top: 1px dashed var(--line); }
+.stage:first-of-type { border-top: 0; padding-top: 2px; }
+.stage .no { font-family: var(--font-mono); color: var(--muted); font-size: .8rem; padding-top: 2px; }
+.stage.idle { opacity: .38; }
+.stage .body { min-width: 0; display: grid; gap: 6px; }
+.stage .title { font-weight: 600; }
+.stage .title .mono { font-weight: 500; color: var(--muted); font-size: .82rem; }
+
+.bits { display: inline-flex; gap: 2px; font-family: var(--font-mono); }
+.bits span { width: 1.45em; text-align: center; border: 1px solid var(--line); border-radius: 3px; background: var(--soft); }
+.bits span.bx { color: var(--xbit); border-color: color-mix(in srgb, var(--xbit) 45%, var(--line)); }
+.bits span.by { color: var(--ybit); border-color: color-mix(in srgb, var(--ybit) 45%, var(--line)); }
+.bits span.hl { outline: 2px solid var(--cursor); outline-offset: -1px; color: var(--cursor); font-weight: 600; }
+.kv { display: flex; flex-wrap: wrap; gap: 6px 16px; font-family: var(--font-mono); font-size: .9rem; }
+.kv b { font-weight: 600; }
+
+.rowstr { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; max-width: 520px; }
+.rowstr div { text-align: center; font-family: var(--font-mono); border: 1px solid var(--line); border-radius: 4px; padding: 2px 0 0; background: var(--soft); min-width: 0; }
+.rowstr div i { display: block; font-style: normal; font-size: .62rem; color: var(--muted); border-top: 1px solid var(--line); margin-top: 2px; }
+.rowstr div.hl { outline: 2px solid var(--cursor); outline-offset: -1px; }
+
+.glyphbox { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+.glyph { display: grid; grid-template-columns: 1.2rem repeat(8, 1.35rem); grid-auto-rows: 1.35rem; gap: 2px; font-family: var(--font-mono); font-size: .65rem; }
+.glyph .h { color: var(--muted); display: flex; align-items: center; justify-content: center; }
+.glyph .c { border-radius: 2px; background: var(--soft); border: 1px solid var(--line); }
+.glyph .c.on { background: var(--ink); border-color: var(--ink); }
+.glyph .c.inrow { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ybit) 55%, transparent); }
+.glyph .c.incol { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--xbit) 55%, transparent); }
+.glyph .c.inrow.incol { box-shadow: none; outline: 3px solid var(--cursor); outline-offset: -1px; }
+.glyph .h.ygy { color: var(--ybit); font-weight: 700; }
+.glyph .h.xgx { color: var(--xbit); font-weight: 700; }
+
+.sw { display: inline-block; width: 1.1em; height: 1.1em; border-radius: 3px; vertical-align: -0.2em; border: 1px solid var(--line); }
+.choice { display: flex; gap: 10px; flex-wrap: wrap; font-family: var(--font-mono); font-size: .9rem; align-items: center; }
+.choice .opt { padding: 3px 8px; border: 1px solid var(--line); border-radius: 5px; }
+.choice .opt.pick { outline: 2px solid var(--cursor); outline-offset: -1px; }
+.bytes2 { display: inline-flex; gap: 4px; }
+.bytes2 span { font-family: var(--font-mono); padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; }
+.bytes2 span.pick { outline: 2px solid var(--cursor); outline-offset: -1px; font-weight: 600; }
+.win { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+.win span { font-family: var(--font-mono); padding: 2px 7px; border: 1px solid var(--line); border-radius: 4px; }
+.win span.done { color: var(--muted); }
+.win span.pick { outline: 2px solid var(--cursor); outline-offset: -1px; font-weight: 600; }
+.out { font-family: var(--font-mono); font-size: 1.05rem; }
+
+.rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-family: var(--font-mono); font-size: .84rem; }
+.rules li { padding: 4px 8px; border-radius: 5px; border: 1px solid transparent; color: var(--muted); }
+.rules li.fire { color: var(--ink); border-color: var(--cursor); background: color-mix(in srgb, var(--cursor) 10%, var(--panel)); }
+
+.log { font-family: var(--font-mono); font-size: .8rem; display: grid; gap: 2px; max-height: 15.5rem; overflow: auto; }
+.log div { display: grid; grid-template-columns: 4.6rem 3.2rem 3rem minmax(0, 1fr); gap: 6px; padding: 1px 4px; border-radius: 3px; }
+.log div:first-child { background: color-mix(in srgb, var(--cursor) 12%, transparent); }
+.log .m { color: var(--muted); }
+
+.lower { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1050px) { .lower { grid-template-columns: minmax(0, 1fr); } }
+.form { display: grid; gap: 6px; }
+.form .r { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) 6.2rem; gap: 6px; align-items: center; }
+.form .r input { min-width: 0; font-family: var(--font-mono); }
+.form .p { display: grid; grid-template-columns: 5rem minmax(0, 1fr); gap: 6px; align-items: center; }
+.form .p input { min-width: 0; font-family: var(--font-mono); }
+.note { font-size: .82rem; color: var(--muted); }
+.why { display: grid; gap: 8px; }
+.why p { margin: 0; max-width: 62ch; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>oled_render 扫描器</h1>
+    <p class="hint" style="margin:2px 0 0"><a href="oled_render.html">English</a></p>
+    <p>屏幕左上角开始，一个字节一个字节往下扫。每按一次“下一个字节”，就是 RTL 里一次 <span class="mono">spi_valid &amp;&amp; !spi_busy</span> 交接。右边按连线顺序显示这个字节是怎么一步步算出来的。点屏幕上任意一点，扫描器会跳到那里。</p>
+  </header>
+
+  <div class="bench">
+    <section class="card" aria-label="OLED 屏幕和控制">
+      <div class="device">
+        <canvas id="scr" width="768" height="512" aria-label="96 乘 64 像素的 OLED 屏幕模拟"></canvas>
+        <div class="devfoot"><span id="dev-l">96 × 64 · 8×8 字格 · 12 列 × 8 行</span><span id="dev-r"></span></div>
+      </div>
+      <div class="controls">
+        <button id="b-byte" class="primary" title="快捷键 →">下一个字节</button>
+        <button id="b-pix" title="快捷键 Shift + →">下一个像素</button>
+        <button id="b-line">下一行像素</button>
+        <button id="b-cell">走完这一格</button>
+        <button id="b-play" title="快捷键 空格">播放</button>
+        <button id="b-reset">从帧头开始</button>
+      </div>
+      <div class="controls">
+        <div class="speed"><span class="label">速度</span><input id="spd" type="range" min="0" max="6" step="1" value="2" aria-label="播放速度"><span id="spd-t" class="mono hint"></span></div>
+        <div class="seg" role="group" aria-label="CPU 状态">
+          <button id="m-run" aria-pressed="true">RUN</button>
+          <button id="m-pass" aria-pressed="false">PASS</button>
+          <button id="m-fail" aria-pressed="false">FAIL</button>
+        </div>
+      </div>
+      <p class="hint" style="margin:8px 0 0">改了状态或文字之后，屏上不会立刻变：要等扫描器扫到那里，新像素才写进屏。这和真屏一样，屏只显示最后一次收到的像素。</p>
+    </section>
+
+    <section class="card" aria-label="渲染数据通路">
+      <h2>这个字节怎么来的 <span class="tag" id="phase-tag"></span></h2>
+
+      <div class="stage" id="st1">
+        <div class="no">①</div>
+        <div class="body">
+          <div class="title">计数器（寄存器） <span class="mono">phase / cnt / x / y / lo</span></div>
+          <div class="kv" id="cnts"></div>
+          <div class="kv"><span>x =</span><span class="bits" id="xbits"></span><span class="hint">高 4 位 → <span class="x">col</span>，低 3 位 → <span class="x">gx</span></span></div>
+          <div class="kv"><span>y =</span><span class="bits" id="ybits"></span><span class="hint">高 3 位 → <span class="y">row</span>，低 3 位 → <span class="y">gy</span></span></div>
+        </div>
+      </div>
+
+      <div class="stage" id="st2">
+        <div class="no">②</div>
+        <div class="body">
+          <div class="title">拆位：在哪一格、格子里哪一点 <span class="mono">纯连线，不花逻辑</span></div>
+          <div class="kv" id="split"></div>
+        </div>
+      </div>
+
+      <div class="stage" id="st3">
+        <div class="no">③</div>
+        <div class="body">
+          <div class="title">oled_text：第 <span id="t-row" class="y"></span> 行这一整行是什么 <span class="mono">(row, col) → ch, fg, bg</span></div>
+          <div class="rowstr" id="rowstr"></div>
+          <div class="kv" id="textout"></div>
+          <div class="hint" id="cellcount"></div>
+        </div>
+      </div>
+
+      <div class="stage" id="st4">
+        <div class="no">④</div>
+        <div class="body">
+          <div class="title">oled_font：这个字的第 <span id="f-gy" class="y"></span> 行 <span class="mono">(ch, gy) → bits</span></div>
+          <div class="glyphbox">
+            <div class="glyph" id="glyph" aria-label="当前字符的 8×8 字形"></div>
+            <div style="display:grid;gap:6px;min-width:0">
+              <div class="kv" id="fontout"></div>
+              <div class="kv"><span>bits =</span><span class="bits" id="bitsrow"></span></div>
+              <div class="hint">屏幕上从左到右是 bit0 → bit7（font8x8 的约定）。取 <span class="mono">bits[<span class="x">gx</span>]</span>。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage" id="st5">
+        <div class="no">⑤</div>
+        <div class="body">
+          <div class="title">选颜色 <span class="mono">pix = bits[gx] ? fg : bg</span></div>
+          <div class="choice" id="choice"></div>
+        </div>
+      </div>
+
+      <div class="stage" id="st6">
+        <div class="no">⑥</div>
+        <div class="body">
+          <div class="title">发出去的字节 <span class="mono">dc / spi_data</span></div>
+          <div id="winrow" class="win"></div>
+          <div class="choice" id="hilo"></div>
+          <div class="out" id="out"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="lower">
+    <section class="card">
+      <h2>交接之后计数器怎么走 <span class="tag">always_ff，只在交接那拍</span></h2>
+      <ul class="rules" id="rules">
+        <li data-r="w1">WIN 且 cnt &lt; 5 → cnt + 1</li>
+        <li data-r="w2">WIN 且 cnt == 5 → 进入 PIX，x = y = 0，lo = 0</li>
+        <li data-r="p1">PIX 且 lo == 0 → lo = 1（刚发完高字节）</li>
+        <li data-r="p2">PIX 且 lo == 1 且 x &lt; 95 → x + 1，lo = 0</li>
+        <li data-r="p3">PIX 且 lo == 1 且 x == 95 且 y &lt; 63 → x = 0，y + 1，lo = 0</li>
+        <li data-r="p4">PIX 且 lo == 1 且 x == 95 且 y == 63 → 回到 WIN，cnt = 0（一帧结束）</li>
+      </ul>
+      <p class="note">像素在发完低字节的那一拍才算写进屏。一帧 = 6 个窗口字节 + 96 × 64 × 2 = 12294 个字节。</p>
+    </section>
+
+    <section class="card">
+      <h2>最近发出的字节 <span class="tag">最新在上</span></h2>
+      <div class="log" id="log" aria-live="off"></div>
+    </section>
+
+    <section class="card">
+      <h2>屏上显示的内容 <span class="tag">喂给 oled_text 的数据</span></h2>
+      <div class="form" id="cpuform"></div>
+      <p class="note" id="cpunote"></p>
+      <div class="form" id="panicform" style="margin-top:6px"></div>
+    </section>
+  </div>
+
+  <section class="card why">
+    <h2>看的时候抓住这三件事</h2>
+    <p><b>主动权在计数器。</b>oled_text 和字库都是纯组合逻辑，自己不知道“现在画到哪了”。每一拍，渲染器拿着当前的 <span class="mono">x、y</span> 去问它们，它们当拍回答。</p>
+    <p><b>同一个格子会被连续问很多次。</b>扫过一行像素时，<span class="mono x">col</span> 每 8 个点才变一次；一个字要扫 8 行像素才画完，所以每个格子一帧里被问 64 次，每次 <span class="mono x">gx</span>、<span class="mono y">gy</span> 不同，取的是字形里不同的点。用“走完这一格”看最清楚。</p>
+    <p><b>每个点要发两个字节。</b><span class="mono">lo = 0</span> 发 <span class="mono">pix[15:8]</span>，<span class="mono">lo = 1</span> 发 <span class="mono">pix[7:0]</span>，第二个字节发完 x 才加一。</p>
+  </section>
+</div>
+
+
+<footer class="wrap" style="margin-top:16px">
+  <p class="note">对应 RTL：<span class="mono">rtl/fpga/rtl/oled/oled_render.sv</span>、<span class="mono">oled_text.sv</span>、<span class="mono">oled_font.sv</span>。页面里的计数器规则和取位方式与这几个模块一致；RTL 改动后，这个页面需要同步更新。</p>
+</footer>
+<script>
+const FONT=[[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[54,127,127,127,62,28,8,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[24,60,60,24,24,0,24,0],[54,54,0,0,0,0,0,0],[54,54,127,54,127,54,54,0],[12,62,3,30,48,31,12,0],[0,99,51,24,12,102,99,0],[28,54,28,110,59,51,110,0],[6,6,3,0,0,0,0,0],[24,12,6,6,6,12,24,0],[6,12,24,24,24,12,6,0],[0,102,60,255,60,102,0,0],[0,12,12,63,12,12,0,0],[0,0,0,0,0,12,12,6],[0,0,0,63,0,0,0,0],[0,0,0,0,0,12,12,0],[96,48,24,12,6,3,1,0],[62,99,115,123,111,103,62,0],[12,14,12,12,12,12,63,0],[30,51,48,28,6,51,63,0],[30,51,48,28,48,51,30,0],[56,60,54,51,127,48,120,0],[63,3,31,48,48,51,30,0],[28,6,3,31,51,51,30,0],[63,51,48,24,12,12,12,0],[30,51,51,30,51,51,30,0],[30,51,51,62,48,24,14,0],[0,12,12,0,0,12,12,0],[0,12,12,0,0,12,12,6],[24,12,6,3,6,12,24,0],[0,0,63,0,0,63,0,0],[6,12,24,48,24,12,6,0],[30,51,48,24,12,0,12,0],[62,99,123,123,123,3,30,0],[12,30,51,51,63,51,51,0],[63,102,102,62,102,102,63,0],[60,102,3,3,3,102,60,0],[31,54,102,102,102,54,31,0],[127,70,22,30,22,70,127,0],[127,70,22,30,22,6,15,0],[60,102,3,3,115,102,124,0],[51,51,51,63,51,51,51,0],[30,12,12,12,12,12,30,0],[120,48,48,48,51,51,30,0],[103,102,54,30,54,102,103,0],[15,6,6,6,70,102,127,0],[99,119,127,127,107,99,99,0],[99,103,111,123,115,99,99,0],[28,54,99,99,99,54,28,0],[63,102,102,62,6,6,15,0],[30,51,51,51,59,30,56,0],[63,102,102,62,54,102,103,0],[30,51,7,14,56,51,30,0],[63,45,12,12,12,12,30,0],[51,51,51,51,51,51,63,0],[51,51,51,51,51,30,12,0],[99,99,99,107,127,119,99,0],[99,99,54,28,28,54,99,0],[51,51,51,30,12,12,30,0],[127,99,49,24,76,102,127,0],[30,6,6,6,6,6,30,0],[3,6,12,24,48,96,64,0],[30,24,24,24,24,24,30,0],[8,28,54,99,0,0,0,0],[0,0,0,0,0,0,0,255],[12,12,24,0,0,0,0,0],[0,0,30,48,62,51,110,0],[7,6,6,62,102,102,59,0],[0,0,30,51,3,51,30,0],[56,48,48,62,51,51,110,0],[0,0,30,51,63,3,30,0],[28,54,6,15,6,6,15,0],[0,0,110,51,51,62,48,31],[7,6,54,110,102,102,103,0],[12,0,14,12,12,12,30,0],[48,0,48,48,48,51,51,30],[7,6,102,54,30,54,103,0],[14,12,12,12,12,12,30,0],[0,0,51,127,127,107,99,0],[0,0,31,51,51,51,51,0],[0,0,30,51,51,51,30,0],[0,0,59,102,102,62,6,15],[0,0,110,51,51,62,48,120],[0,0,59,110,102,6,15,0],[0,0,62,3,30,48,31,0],[8,12,62,12,12,44,24,0],[0,0,51,51,51,51,110,0],[0,0,51,51,51,30,12,0],[0,0,99,107,127,127,54,0],[0,0,99,54,28,54,99,0],[0,0,51,51,51,62,48,31],[0,0,63,25,12,38,63,0],[56,12,12,7,12,12,56,0],[24,24,24,0,24,24,24,0],[7,12,12,56,12,12,7,0],[110,59,0,0,0,0,0,0],[0,0,0,0,0,0,0,0]];
+const W = 96, H = 64, S = 8;
+const WIN = [0x15, 0x00, 0x5F, 0x75, 0x00, 0x3F];
+const RGB = { BLACK: 0x0000, WHITE: 0xFFFF, RED: 0xF800, GREEN: 0x07E0, YELLOW: 0xFFE0, BLUE: 0x001F };
+const COLOR_NAMES = ["WHITE", "YELLOW", "GREEN", "RED", "BLUE"];
+
+const cfg = {
+  mode: "RUN",
+  cpu: ["", "Hello RV32I", "THANK YOU ♥", "", "OLED 12x8", "", "", "yibo-soc"],
+  cpuColor: ["", "WHITE", "YELLOW", "WHITE", "GREEN", "WHITE", "WHITE", "BLUE"],
+  cause: 2, pc: 0x800000ac, tohost: 0, buserr: 1, addr: 0x2000000f,
+};
+
+let st = { phase: "WIN", cnt: 0, x: 0, y: 0, lo: 0 };
+let frameBytes = 0, frames = 0;
+const fb = new Uint16Array(W * H);
+const scanned = new Uint8Array(W * H);
+const log = [];
+
+const hex = (v, n) => (v >>> 0).toString(16).padStart(n, "0");
+const pad12 = s => (s + "            ").slice(0, 12);
+function codesOf(str) {
+  const out = [];
+  for (const chr of str) {
+    if (out.length === 12) break;
+    if (chr === "♥") out.push(3);
+    else { const c = chr.codePointAt(0); out.push(c < 128 ? c : 0x3F); }
+  }
+  while (out.length < 12) out.push(0);
+  return out;
+}
+function statusRow() { return codesOf(pad12(cfg.mode)); }
+function panicRow(r) {
+  switch (r) {
+    case 2: return codesOf("CAUSE " + hex(cfg.cause & 15, 1) + "     ");
+    case 3: return codesOf("PC  " + hex(cfg.pc, 8));
+    case 4: return codesOf("TOH " + hex(cfg.tohost, 8));
+    case 5: return codesOf("BUS " + (cfg.buserr ? "1" : "0") + "       ");
+    case 6: return codesOf("ADR " + hex(cfg.addr, 8));
+    default: return codesOf("            ");
+  }
+}
+function rowCodes(r) {
+  if (r === 0) return statusRow();
+  if (cfg.mode !== "FAIL") return codesOf(cfg.cpu[r] || "");   // RUN and PASS: CPU text
+  return panicRow(r);
+}
+function rowSource(r) {
+  if (r === 0) return "状态行（硬件）";
+  return cfg.mode !== "FAIL" ? "CPU 写的 txt[]" : "panic_row()";
+}
+function rowColors(r) {
+  if (r === 0) return { fg: RGB.BLACK, bg: cfg.mode === "RUN" ? RGB.GREEN : cfg.mode === "PASS" ? RGB.YELLOW : RGB.RED };
+  if (cfg.mode !== "FAIL") return { fg: RGB[cfg.cpuColor[r] || "WHITE"], bg: RGB.BLACK };
+  return { fg: (r === 6 && cfg.buserr) ? RGB.RED : RGB.WHITE, bg: RGB.BLACK };
+}
+function css565(c) {
+  const r5 = (c >> 11) & 31, g6 = (c >> 5) & 63, b5 = c & 31;
+  return `rgb(${(r5 << 3) | (r5 >> 2)},${(g6 << 2) | (g6 >> 4)},${(b5 << 3) | (b5 >> 2)})`;
+}
+function evalPixel(x, y) {
+  const row = y >> 3, col = x >> 3, gy = y & 7, gx = x & 7;
+  const codes = rowCodes(row), ch = codes[col], col2 = rowColors(row);
+  const bits = FONT[ch & 127][gy], on = (bits >> gx) & 1;
+  const pix = on ? col2.fg : col2.bg;
+  return { row, col, gx, gy, codes, ch, fg: col2.fg, bg: col2.bg, bits, on, pix };
+}
+function current() {
+  if (st.phase === "WIN") return { dc: 0, data: WIN[st.cnt] };
+  const p = evalPixel(st.x, st.y);
+  return Object.assign(p, { dc: 1, data: st.lo ? (p.pix & 0xFF) : (p.pix >> 8) });
+}
+function nextRule() {
+  if (st.phase === "WIN") return st.cnt < 5 ? "w1" : "w2";
+  if (st.lo === 0) return "p1";
+  if (st.x < W - 1) return "p2";
+  return st.y < H - 1 ? "p3" : "p4";
+}
+function step() {
+  const c = current();
+  const desc = st.phase === "WIN" ? `窗口 cnt=${st.cnt}` : `(${st.x},${st.y}) ${st.lo ? "低" : "高"}字节`;
+  log.unshift({ n: frameBytes, dc: c.dc, data: c.data, desc });
+  if (log.length > 40) log.pop();
+  frameBytes++;
+  if (st.phase === "WIN") {
+    if (st.cnt < 5) st.cnt++;
+    else { st.phase = "PIX"; st.x = 0; st.y = 0; st.lo = 0; }
+    return;
+  }
+  if (st.lo === 0) { st.lo = 1; return; }
+  const i = st.y * W + st.x;
+  fb[i] = c.pix; scanned[i] = 1; st.lo = 0;
+  if (st.x < W - 1) st.x++;
+  else {
+    st.x = 0;
+    if (st.y < H - 1) st.y++;
+    else { st.phase = "WIN"; st.cnt = 0; frames++; frameBytes = 0; scanned.fill(0); }
+  }
+}
+function paintAll() { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) fb[y * W + x] = evalPixel(x, y).pix; }
+function jumpTo(x, y) {
+  st = { phase: "PIX", cnt: 0, x, y, lo: 0 };
+  const upto = y * W + x;
+  for (let i = 0; i < W * H; i++) scanned[i] = i < upto ? 1 : 0;
+  for (let i = 0; i < upto; i++) fb[i] = evalPixel(i % W, (i / W) | 0).pix;
+  frameBytes = 6 + 2 * upto;
+  log.length = 0;
+}
+
+/* ---------- drawing ---------- */
+const cv = document.getElementById("scr"), g = cv.getContext("2d");
+function draw() {
+  const veil = st.phase === "PIX";
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    g.fillStyle = css565(fb[i]);
+    g.fillRect(x * S, y * S, S, S);
+    if (veil && !scanned[i] && !(x === st.x && y === st.y)) { g.fillStyle = "rgba(6,8,10,0.62)"; g.fillRect(x * S, y * S, S, S); }
+  }
+  g.strokeStyle = "rgba(255,255,255,0.10)"; g.lineWidth = 1;
+  for (let x = 0; x <= W; x += 8) { g.beginPath(); g.moveTo(x * S + .5, 0); g.lineTo(x * S + .5, H * S); g.stroke(); }
+  for (let y = 0; y <= H; y += 8) { g.beginPath(); g.moveTo(0, y * S + .5); g.lineTo(W * S, y * S + .5); g.stroke(); }
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--cursor").trim() || "#f2a640";
+  if (st.phase === "PIX") {
+    const cx = (st.x >> 3) * 8 * S, cy = (st.y >> 3) * 8 * S;
+    g.setLineDash([5, 4]); g.strokeStyle = accent; g.lineWidth = 2; g.strokeRect(cx + 1, cy + 1, 8 * S - 2, 8 * S - 2); g.setLineDash([]);
+    g.strokeStyle = accent; g.lineWidth = 3; g.strokeRect(st.x * S - 1.5, st.y * S - 1.5, S + 3, S + 3);
+  }
+  renderPanel();
+}
+
+/* ---------- datapath panel ---------- */
+const $ = id => document.getElementById(id);
+function bitsHTML(v, n, hiCls, hiN, loCls) {
+  let s = "";
+  for (let b = n - 1; b >= 0; b--) s += `<span class="${b >= n - hiN ? hiCls : loCls}"${b === n - hiN - 1 ? ' style="margin-left:7px"' : ""} title="bit${b}">${(v >> b) & 1}</span>`;
+  return s;
+}
+function chLabel(ch) {
+  if (ch === 0) return "0x00（空）";
+  if (ch === 3) return "0x03 ♥";
+  if (ch === 32) return "0x20 ' '";
+  return `0x${hex(ch, 2)} '${String.fromCharCode(ch)}'`;
+}
+function renderPanel() {
+  const c = current(), win = st.phase === "WIN";
+  $("phase-tag").textContent = win ? "窗口阶段：发 6 个命令字节，D/C = 0" : "像素阶段：D/C = 1";
+  $("cnts").innerHTML = `<span>phase = <b>${st.phase}</b></span><span>cnt = <b>${st.cnt}</b></span><span>x = <b class="x">${st.x}</b></span><span>y = <b class="y">${st.y}</b></span><span>lo = <b class="cur">${st.lo}</b></span>`;
+  $("xbits").innerHTML = bitsHTML(st.x, 7, "bx", 4, "bx");
+  $("ybits").innerHTML = bitsHTML(st.y, 6, "by", 3, "by");
+  ["st2", "st3", "st4", "st5"].forEach(id => $(id).classList.toggle("idle", win));
+  const winRow = $("winrow");
+  winRow.innerHTML = win ? WIN.map((b, i) => `<span class="${i < st.cnt ? "done" : i === st.cnt ? "pick" : ""}">${hex(b, 2).toUpperCase()}</span>`).join("") + `<span class="hint" style="border:0">15 00 5F = 列 0..95，75 00 3F = 行 0..63</span>` : "";
+  if (win) {
+    $("split").innerHTML = `<span class="hint">窗口阶段不查表</span>`;
+    $("rowstr").innerHTML = ""; $("textout").innerHTML = ""; $("cellcount").textContent = "";
+    $("glyph").innerHTML = ""; $("fontout").innerHTML = ""; $("bitsrow").innerHTML = "";
+    $("choice").innerHTML = ""; $("hilo").innerHTML = "";
+    $("t-row").textContent = "–"; $("f-gy").textContent = "–";
+  } else {
+    $("split").innerHTML = `<span><span class="x">col</span> = x[6:3] = <b class="x">${c.col}</b></span><span><span class="x">gx</span> = x[2:0] = <b class="x">${c.gx}</b></span><span><span class="y">row</span> = y[5:3] = <b class="y">${c.row}</b></span><span><span class="y">gy</span> = y[2:0] = <b class="y">${c.gy}</b></span>`;
+    $("t-row").textContent = c.row;
+    $("rowstr").innerHTML = c.codes.map((ch, i) => `<div class="${i === c.col ? "hl" : ""}">${ch === 0 ? "·" : ch === 3 ? "♥" : ch === 32 ? "␣" : String.fromCharCode(ch)}<i>${i}</i></div>`).join("");
+    const lsb = 8 * (11 - c.col);
+    $("textout").innerHTML = `<span>来源：${rowSource(c.row)}</span><span>ch = s[8*(11-${c.col}) +: 8] = s[${lsb + 7}:${lsb}] = <b class="cur">${chLabel(c.ch)}</b></span><span>fg <span class="sw" style="background:${css565(c.fg)}"></span> ${hex(c.fg, 4)}</span><span>bg <span class="sw" style="background:${css565(c.bg)}"></span> ${hex(c.bg, 4)}</span>`;
+    const done = c.gy * 8 + c.gx;
+    $("cellcount").textContent = `这一格（row ${c.row}, col ${c.col}）本帧已经画了 ${done} / 64 个点；现在是第 ${done + 1} 个。`;
+    $("f-gy").textContent = c.gy;
+    let gh = `<div class="h"></div>`;
+    for (let b = 0; b < 8; b++) gh += `<div class="h ${b === c.gx ? "xgx" : ""}">${b}</div>`;
+    for (let r = 0; r < 8; r++) {
+      gh += `<div class="h ${r === c.gy ? "ygy" : ""}">${r}</div>`;
+      const rb = FONT[c.ch & 127][r];
+      for (let b = 0; b < 8; b++) gh += `<div class="c ${(rb >> b) & 1 ? "on" : ""} ${r === c.gy ? "inrow" : ""} ${b === c.gx ? "incol" : ""}"></div>`;
+    }
+    $("glyph").innerHTML = gh;
+    $("fontout").innerHTML = `<span>FONT[${chLabel(c.ch)}][<span class="y">${c.gy}</span>] = <b>8'h${hex(c.bits, 2)}</b></span>`;
+    let br = "";
+    for (let b = 0; b < 8; b++) br += `<span class="${b === c.gx ? "hl" : ""}" title="bit${b}">${(c.bits >> b) & 1}</span>`;
+    $("bitsrow").innerHTML = br + `<span class="hint" style="border:0;width:auto;background:none">bit0 … bit7</span>`;
+    $("choice").innerHTML = `<span>bits[<span class="x">${c.gx}</span>] = <b>${c.on}</b> →</span><span class="opt ${c.on ? "pick" : ""}">fg <span class="sw" style="background:${css565(c.fg)}"></span></span><span class="opt ${c.on ? "" : "pick"}">bg <span class="sw" style="background:${css565(c.bg)}"></span></span><span>pix = 16'h${hex(c.pix, 4)}</span>`;
+    $("hilo").innerHTML = `<span>lo = <b class="cur">${st.lo}</b> →</span><span class="bytes2"><span class="${st.lo ? "" : "pick"}">pix[15:8] = ${hex(c.pix >> 8, 2).toUpperCase()}</span><span class="${st.lo ? "pick" : ""}">pix[7:0] = ${hex(c.pix & 255, 2).toUpperCase()}</span></span>`;
+  }
+  $("out").innerHTML = `dc = <b>${c.dc}</b>　spi_data = <b class="cur">8'h${hex(c.data, 2).toUpperCase()}</b>`;
+  const r = nextRule();
+  document.querySelectorAll("#rules li").forEach(li => li.classList.toggle("fire", li.dataset.r === r));
+  $("log").innerHTML = log.length ? log.slice(0, 24).map(e => `<div><span class="m">#${e.n}</span><span>dc=${e.dc}</span><span>${hex(e.data, 2).toUpperCase()}</span><span class="m">${e.desc}</span></div>`).join("") : `<div class="m">还没发字节。按“下一个字节”。</div>`;
+  $("dev-r").textContent = `第 ${frames + 1} 帧 · 本帧 ${frameBytes} / 12294 字节`;
+}
+
+/* ---------- controls ---------- */
+let playing = false, acc = 0, last = 0;
+const SPEEDS = [
+  { t: "每秒 2 个字节", per: 0, ms: 500 },
+  { t: "每秒 6 个字节", per: 0, ms: 160 },
+  { t: "每帧 2 个字节", per: 2 },
+  { t: "每帧 16 个字节", per: 16 },
+  { t: "每帧一行像素", per: 192 },
+  { t: "每帧一行字", per: 1536 },
+  { t: "每帧一整屏", per: 12294 },
+];
+function speed() { return SPEEDS[+$("spd").value]; }
+$("spd-t").textContent = speed().t;
+$("spd").addEventListener("input", () => { $("spd-t").textContent = speed().t; });
+function loop(ts) {
+  if (!playing) return;
+  const sp = speed();
+  if (sp.per) { for (let i = 0; i < sp.per; i++) step(); draw(); }
+  else if (ts - last >= sp.ms) { last = ts; step(); draw(); }
+  requestAnimationFrame(loop);
+}
+function setPlay(p) { playing = p; $("b-play").textContent = p ? "暂停" : "播放"; if (p) requestAnimationFrame(loop); }
+$("b-play").onclick = () => setPlay(!playing);
+$("b-byte").onclick = () => { setPlay(false); step(); draw(); };
+$("b-pix").onclick = () => { setPlay(false); const ph = st.phase; if (ph === "WIN") { while (st.phase === "WIN") step(); } else { step(); if (st.lo === 1) step(); } draw(); };
+$("b-line").onclick = () => { setPlay(false); if (st.phase === "WIN") while (st.phase === "WIN") step(); const y0 = st.y; let guard = 0; while (st.phase === "PIX" && st.y === y0 && guard++ < 400) step(); draw(); };
+$("b-cell").onclick = () => {
+  setPlay(false);
+  if (st.phase === "WIN") while (st.phase === "WIN") step();
+  const r0 = st.y >> 3, c0 = st.x >> 3;
+  for (let guard = 0; guard < 13000 && st.phase === "PIX"; guard++) {
+    const atLast = (st.y >> 3) === r0 && (st.x >> 3) === c0 && (st.y & 7) === 7 && (st.x & 7) === 7;
+    if (atLast) { step(); if (st.lo === 1) step(); break; }
+    step();
+  }
+  draw();
+};
+$("b-reset").onclick = () => { setPlay(false); st = { phase: "WIN", cnt: 0, x: 0, y: 0, lo: 0 }; frameBytes = 0; scanned.fill(0); log.length = 0; draw(); };
+cv.addEventListener("click", e => {
+  const rect = cv.getBoundingClientRect();
+  const x = Math.min(W - 1, Math.max(0, Math.floor((e.clientX - rect.left) / rect.width * W)));
+  const y = Math.min(H - 1, Math.max(0, Math.floor((e.clientY - rect.top) / rect.height * H)));
+  setPlay(false); jumpTo(x, y); draw();
+});
+document.addEventListener("keydown", e => {
+  if (e.target.closest("input, select, textarea")) return;
+  if (e.key === "ArrowRight") { e.preventDefault(); (e.shiftKey ? $("b-pix") : $("b-byte")).click(); }
+  else if (e.key === " ") { e.preventDefault(); $("b-play").click(); }
+});
+function setMode(m) {
+  cfg.mode = m;
+  [["RUN", "m-run"], ["PASS", "m-pass"], ["FAIL", "m-fail"]].forEach(([k, id]) => $(id).setAttribute("aria-pressed", String(k === m)));
+  $("cpunote").textContent = m === "RUN"  ? "RUN：第 1–7 行显示 CPU 写进 txt[] 的字，每行一个颜色（row_fg）。♥ 是字库里的 0x03。"
+                          : m === "PASS" ? "PASS 停机：只有第 0 行变成黄色 PASS，第 1–7 行照旧显示 CPU 写的字（oled_text: !halted || pass）。"
+                          :                "FAIL 停机：第 1–7 行被 panic_row() 换掉，CPU 写的字还在 txt[] 里，只是不显示。";
+  renderPanel();
+}
+$("m-run").onclick = () => setMode("RUN");
+$("m-pass").onclick = () => { cfg.tohost = 1; cfg.buserr = 0; cfg.cause = 3; cfg.pc = 0x80000040; cfg.addr = 0; syncPanicForm(); setMode("PASS"); };
+$("m-fail").onclick = () => { cfg.cause = 2; cfg.pc = 0x800000ac; cfg.tohost = 0; cfg.buserr = 1; cfg.addr = 0x2000000f; syncPanicForm(); setMode("FAIL"); };
+
+function buildForms() {
+  let h = `<div class="label">CPU 写的字（第 1–7 行，最多 12 个字符）</div>`;
+  for (let r = 1; r < 8; r++) {
+    h += `<div class="r"><span class="mono hint">row ${r}</span><input type="text" id="cpu-${r}" maxlength="16" value="${cfg.cpu[r].replace(/"/g, "&quot;")}" aria-label="第 ${r} 行文字"><select id="cc-${r}" aria-label="第 ${r} 行颜色">${COLOR_NAMES.map(n => `<option ${n === cfg.cpuColor[r] ? "selected" : ""}>${n}</option>`).join("")}</select></div>`;
+  }
+  $("cpuform").innerHTML = h;
+  for (let r = 1; r < 8; r++) {
+    $("cpu-" + r).addEventListener("input", e => { cfg.cpu[r] = e.target.value; renderPanel(); });
+    $("cc-" + r).addEventListener("change", e => { cfg.cpuColor[r] = e.target.value; renderPanel(); });
+  }
+  $("panicform").innerHTML = `<div class="label">halt 时的信息（panic_row 用，只在 FAIL 时上屏）</div>
+    <div class="p"><span class="mono hint">cause</span><input type="text" id="p-cause" maxlength="1" aria-label="cause"></div>
+    <div class="p"><span class="mono hint">pc</span><input type="text" id="p-pc" maxlength="8" aria-label="pc"></div>
+    <div class="p"><span class="mono hint">tohost</span><input type="text" id="p-toh" maxlength="8" aria-label="tohost"></div>
+    <div class="p"><span class="mono hint">bus_err</span><input type="text" id="p-bus" maxlength="1" aria-label="bus_err"></div>
+    <div class="p"><span class="mono hint">addr</span><input type="text" id="p-addr" maxlength="8" aria-label="bus_err_addr"></div>`;
+  const bind = (id, key, mask) => $(id).addEventListener("input", e => { const v = parseInt(e.target.value || "0", 16); if (!Number.isNaN(v)) { cfg[key] = (v & mask) >>> 0; renderPanel(); } });
+  bind("p-cause", "cause", 15); bind("p-pc", "pc", 0xFFFFFFFF); bind("p-toh", "tohost", 0xFFFFFFFF); bind("p-bus", "buserr", 1); bind("p-addr", "addr", 0xFFFFFFFF);
+  syncPanicForm();
+}
+function syncPanicForm() {
+  $("p-cause").value = hex(cfg.cause, 1); $("p-pc").value = hex(cfg.pc, 8); $("p-toh").value = hex(cfg.tohost, 8);
+  $("p-bus").value = String(cfg.buserr); $("p-addr").value = hex(cfg.addr, 8);
+}
+
+buildForms();
+setMode("RUN");
+paintAll();
+jumpTo(10, 10);
+draw();
+</script>
+</body>
+</html>
