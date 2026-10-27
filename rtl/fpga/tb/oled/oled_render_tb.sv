@@ -2,7 +2,8 @@
 // oled_render (+ oled_text + oled_font) -> oled_spi -> SSD1331 model, whole frames checked
 // pixel by pixel against a reference picture built here from literal strings.
 //   make oled-render-test            -> also writes sim/build/oled_render_vcs/frame_<case>.ppm
-// Cases: RUN with CPU text + a row colour; halted PASS; halted FAIL with bus_err.
+// Cases: RUN with CPU text + a row colour; halted PASS (CPU text stays, only row 0 changes);
+// halted FAIL with bus_err (rows 1-7 become the panic page).
 // Each case changes the inputs, lets the frame in flight finish, then checks the next full
 // frame (a change only shows once the scan reaches it).
 // The reference glyphs are read from oled_font itself (checked separately by printing them);
@@ -125,13 +126,11 @@ module oled_render_tb;
         next_full_frame();
         check_frame("run");
 
-        // ---- case 2: halted PASS
+        // ---- case 2: halted PASS, the CPU text and row colours of case 1 stay on screen
         trap_cause_q = 4'h3; trap_pc_q = 32'h8000_0040; tohost = 32'h1; bus_err = 1'b0; bus_err_addr = '0;
         pass = 1'b1; halted = 1'b1;
-        exp_txt = '{"PASS        ", "            ", "CAUSE 3     ", "PC  80000040", "TOH 00000001",
-                    "BUS 0       ", "ADR 00000000", "            "};
-        foreach (exp_fg[r]) begin exp_fg[r] = RGB_WHITE; exp_bg[r] = RGB_BLACK; end
-        exp_fg[0] = RGB_BLACK; exp_bg[0] = RGB_YELLOW;
+        exp_txt[0] = "PASS        ";
+        exp_bg[0]  = RGB_YELLOW;
         next_full_frame();
         check_frame("pass");
 

@@ -75,7 +75,7 @@ import peripherals::*;
             ch = status_row(halted, pass)[8*(11-col) +:8];
             fg = RGB_BLACK;
             bg = !halted ? RGB_GREEN : (pass ? RGB_YELLOW : RGB_RED);
-        end else if (!halted) begin                            // RUNNING
+        end else if (!halted || pass) begin                            // RUNNING
             ch = text[{row, col}];
             if (row_fg[row] != 16'h0) fg = row_fg[row];
         end else begin                                         // HALTED, panic

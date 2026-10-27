@@ -332,16 +332,16 @@ function panicRow(r) {
 }
 function rowCodes(r) {
   if (r === 0) return statusRow();
-  if (cfg.mode === "RUN") return codesOf(cfg.cpu[r] || "");
+  if (cfg.mode !== "FAIL") return codesOf(cfg.cpu[r] || "");   // RUN and PASS: CPU text
   return panicRow(r);
 }
 function rowSource(r) {
   if (r === 0) return "状态行（硬件）";
-  return cfg.mode === "RUN" ? "CPU 写的 txt[]" : "panic_row()";
+  return cfg.mode !== "FAIL" ? "CPU 写的 txt[]" : "panic_row()";
 }
 function rowColors(r) {
   if (r === 0) return { fg: RGB.BLACK, bg: cfg.mode === "RUN" ? RGB.GREEN : cfg.mode === "PASS" ? RGB.YELLOW : RGB.RED };
-  if (cfg.mode === "RUN") return { fg: RGB[cfg.cpuColor[r] || "WHITE"], bg: RGB.BLACK };
+  if (cfg.mode !== "FAIL") return { fg: RGB[cfg.cpuColor[r] || "WHITE"], bg: RGB.BLACK };
   return { fg: (r === 6 && cfg.buserr) ? RGB.RED : RGB.WHITE, bg: RGB.BLACK };
 }
 function css565(c) {
@@ -530,7 +530,9 @@ document.addEventListener("keydown", e => {
 function setMode(m) {
   cfg.mode = m;
   [["RUN", "m-run"], ["PASS", "m-pass"], ["FAIL", "m-fail"]].forEach(([k, id]) => $(id).setAttribute("aria-pressed", String(k === m)));
-  $("cpunote").textContent = m === "RUN" ? "RUN：第 1–7 行显示 CPU 写进 txt[] 的字，每行一个颜色（row_fg）。♥ 是字库里的 0x03。" : "已 halt：第 1–7 行被 panic_row() 换掉，CPU 写的字还在 txt[] 里，只是不显示。";
+  $("cpunote").textContent = m === "RUN"  ? "RUN：第 1–7 行显示 CPU 写进 txt[] 的字，每行一个颜色（row_fg）。♥ 是字库里的 0x03。"
+                          : m === "PASS" ? "PASS 停机：只有第 0 行变成黄色 PASS，第 1–7 行照旧显示 CPU 写的字（oled_text: !halted || pass）。"
+                          :                "FAIL 停机：第 1–7 行被 panic_row() 换掉，CPU 写的字还在 txt[] 里，只是不显示。";
   renderPanel();
 }
 $("m-run").onclick = () => setMode("RUN");
@@ -547,7 +549,7 @@ function buildForms() {
     $("cpu-" + r).addEventListener("input", e => { cfg.cpu[r] = e.target.value; renderPanel(); });
     $("cc-" + r).addEventListener("change", e => { cfg.cpuColor[r] = e.target.value; renderPanel(); });
   }
-  $("panicform").innerHTML = `<div class="label">halt 时的信息（panic_row 用）</div>
+  $("panicform").innerHTML = `<div class="label">halt 时的信息（panic_row 用，只在 FAIL 时上屏）</div>
     <div class="p"><span class="mono hint">cause</span><input type="text" id="p-cause" maxlength="1" aria-label="cause"></div>
     <div class="p"><span class="mono hint">pc</span><input type="text" id="p-pc" maxlength="8" aria-label="pc"></div>
     <div class="p"><span class="mono hint">tohost</span><input type="text" id="p-toh" maxlength="8" aria-label="tohost"></div>

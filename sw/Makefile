@@ -31,7 +31,8 @@ CFLAGS  := -march=rv32i -mabi=ilp32 -O2 -ffreestanding -nostdlib -Wall -I$(COMMO
 LDFLAGS := -T $(COMMON)/rt/link.ld -Wl,--no-warn-rwx-segments
 
 SRCS := $(COMMON)/rt/crt0.S $(wildcard $(SRC)/*.c) $(COMMON)/rt/lib.c \
-        $(COMMON)/drv/uart.c $(COMMON)/lib/print.c
+        $(COMMON)/drv/uart.c $(COMMON)/lib/print.c $(COMMON)/drv/oled.c \
+	    $(COMMON)/lib/tty.c
 DEPS := $(SRCS) $(COMMON)/rt/link.ld $(wildcard $(COMMON)/*/*.h $(SRC)/*.h)
 
 ELF       := $(BUILD)/$(PROG).elf

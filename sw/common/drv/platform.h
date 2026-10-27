@@ -4,6 +4,11 @@
 #include <stdint.h>
 
 #define UART0_BASE 0x10000000UL
+#define OLED_TXT_BASE  0x10000200UL
+#define OLED_COLOR_BASE 0x10000400UL
+#define OLED_ROWS  8
+#define OLED_COLS  12
+#define OLED_STRIDE  16
 
 #ifdef PLATFORM_SPIKE                  /* set by sw/Makefile for the _spike.elf build */
 /* Spike's ns16550 (spike riscv/platform.h): NS16550_REG_SHIFT 0, NS16550_REG_IO_WIDTH 1. */

@@ -9,7 +9,7 @@ import peripherals::*;
     parameter int          RAM_AW            = SOC_RAM_AW,
     parameter logic [31:0] MMIO_BASE         = SOC_MMIO_BASE,
     parameter int          MMIO_AW           = SOC_MMIO_AW,
-    parameter string       RAM_INIT          = "uart_hello.mem",
+    parameter string       RAM_INIT          = "oled_term.mem",
     parameter int          UART_CLKS_PER_BIT = SOC_UART_CPB,
     parameter int          PANIC_PERIOD      = SOC_CLK_HZ,
     parameter int          OLED_MS_CYCLES    = 25_000

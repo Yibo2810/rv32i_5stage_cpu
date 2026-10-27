@@ -5,9 +5,13 @@ module fpga_sys_tb;
 
     localparam string       DEFAULT_MEM = "rtl/fpga/build/mmap_test.mem";
     localparam int          SIM_CPB     = 8;      // UART clocks per bit in sim (board: 217)
+    // Wait for an RX echo in CPU cycles, not bit times: software latency does not shrink
+    // with SIM_CPB. oled_term page flip measured 794 cycles; normal echo ~260.
+    localparam int          ECHO_TIMEOUT = 4000;
     localparam int          SIM_PANIC_PERIOD = 500; // idle cycles between panic lines in sim (board: 1 s)
     localparam int          PANIC_LEN   = 72;     // bytes per halt_reporter line
     localparam int          SIM_OLED_MS = 10;     // oled_seq: clk per "ms" in sim (board: 25_000)
+    localparam string       FS_DIR      = "sim/build/fpga_sys_vcs";   // oled.ppm goes here
 
     logic clk = 1'b0;
     logic rst = 1'b1;
@@ -41,6 +45,29 @@ module fpga_sys_tb;
     string       uart_rx_file;      // +UART_RX_FILE=, bytes the "PC" types into uart_rxd (trailing CR/LF dropped)
     int unsigned rx_sent    = 0;
     int unsigned rx_no_echo = 0;
+    string       expect_oled_file;  // +EXPECT_OLED_FILE=, rows 1-7 after a PASS halt: "<fg hex4> <text>" per line
+
+    // ---- OLED screen check: reference glyphs read out of oled_font, CPU writes counted
+    localparam int OLED_W = 96, OLED_H = 64;
+    logic [7:0]  f_ch = '0;
+    logic [2:0]  f_gy = '0;
+    logic [7:0]  f_bits;
+    logic [7:0]  glyph [128][8];
+    int unsigned oled_txt_wrs = 0, oled_col_wrs = 0;
+
+    oled_font u_ref_font (.ch(f_ch), .gy(f_gy), .bits(f_bits));
+
+    initial
+        for (int ch = 0; ch < 128; ch++)
+            for (int gy = 0; gy < 8; gy++) begin
+                f_ch = 8'(ch); f_gy = 3'(gy); #1;
+                glyph[ch][gy] = f_bits;
+            end
+
+    always @(posedge clk) if (!rst) begin
+        if (u_sys.oled_txt_wr) oled_txt_wrs++;
+        if (u_sys.oled_col_wr) oled_col_wrs++;
+    end
 
     task automatic apply_reset();
         rst = 1'b1;
@@ -135,9 +162,11 @@ module fpga_sys_tb;
     endfunction
 
     // ---- PC -> FPGA sender: 8N1 on real time (not on clk), random phase per frame.
-    // Paced by the echo: the next byte goes out only after the program has sent one byte
-    // back, so the single-byte RBR never overruns in this test (overrun is covered by
-    // uart_16550_tb). Starts after the program's first line (its prompt).
+    // Paced by the echo: the next byte goes out only after the program has echoed and the
+    // TX line has gone idle again. An echo can be several bytes ("\b \b", "\r\n") and the core
+    // does not read RBR while it is still sending them, so the single-byte RBR never overruns
+    // in this test (overrun is covered by uart_16550_tb). Starts after the program's first
+    // line (its prompt).
     localparam realtime RX_BIT_NS = SIM_CPB * 40.0;
 
     task automatic uart_send_byte(input logic [7:0] b);
@@ -175,13 +204,15 @@ module fpga_sys_tb;
                 uart_send_byte(txt[i]);
                 rx_sent++;
                 guard = 0;
-                while (u_rx.bytes.size() <= n_before && guard < 40 * SIM_CPB) begin
+                while (u_rx.bytes.size() <= n_before && guard < ECHO_TIMEOUT) begin
                     @(negedge clk);
                     guard++;
                 end
                 if (u_rx.bytes.size() <= n_before) begin
                     rx_no_echo++;
                     $display("UART RX: no echo for byte %0d (%02h)", i, txt[i]);
+                end else begin
+                    wait_uart_idle();   // the rest of a multi-byte echo
                 end
             end
         end
@@ -191,6 +222,81 @@ module fpga_sys_tb;
         errors++;
         $display("CHECK FAIL, see %s", name);
     endfunction
+
+    // Wait for n frame ends (oled_render PIX -> WIN). After a halt, n = 2 guarantees one whole
+    // frame scanned with the final text: the first end may close a frame already in flight.
+    task automatic wait_oled_frames(input int n, output bit ok);
+        int unsigned guard;
+        ok = 1'b1;
+        repeat (n) begin
+            guard = 0;
+            while (u_sys.u_ctrl.u_render.state != 1'b1 && guard < 2_000_000) begin @(negedge clk); guard++; end
+            while (u_sys.u_ctrl.u_render.state != 1'b0 && guard < 2_000_000) begin @(negedge clk); guard++; end
+            if (guard >= 2_000_000) begin ok = 1'b0; return; end
+        end
+        repeat (50) @(negedge clk);   // last pixel bytes leave oled_spi
+    endtask
+
+    // Expected screen after a PASS halt: row 0 is the PASS bar (from the RTL rule, not the file),
+    // rows 1-7 come from the file. Missing lines / short text = blank cells, white.
+    task automatic check_oled(input string path);
+        string       exp_txt [8];
+        logic [15:0] exp_fg  [8];
+        logic [15:0] exp_bg  [8];
+        string       line;
+        int          fd, r, bad, first_r, first_c;
+        bit          ok;
+
+        foreach (exp_txt[i]) begin exp_txt[i] = ""; exp_fg[i] = peripherals::RGB_WHITE; exp_bg[i] = peripherals::RGB_BLACK; end
+        exp_txt[0] = "PASS        "; exp_fg[0] = peripherals::RGB_BLACK; exp_bg[0] = peripherals::RGB_YELLOW;
+        fd = $fopen(path, "r");
+        if (fd == 0) $fatal(1, "cannot open %s", path);
+        r = 1;
+        while (r < 8 && $fgets(line, fd)) begin
+            while (line.len() > 0 && (line[line.len()-1] == "\n" || line[line.len()-1] == 8'h0d))
+                line = line.substr(0, line.len() - 2);
+            if (line.len() < 4) $fatal(1, "%s line %0d: want \"<fg hex4> <text>\", got \"%s\"", path, r, line);
+            exp_fg[r]  = 16'(line.substr(0, 3).atohex());
+            exp_txt[r] = (line.len() > 5) ? line.substr(5, line.len() - 1) : "";
+            r++;
+        end
+        $fclose(fd);
+
+        if (oled_txt_wrs == 0) report("oled_no_writes");   // a blank screen must not pass by accident
+        if (!(halted === 1'b1 && pass === 1'b1)) begin
+            $display("OLED: not checked, the CPU text is only kept on screen after a PASS halt");
+            report("oled_not_pass");
+            return;
+        end
+        wait_oled_frames(2, ok);
+        if (!ok) begin
+            report("oled_no_frame");
+            return;
+        end
+
+        bad = 0; first_r = -1; first_c = -1;
+        for (int y = 0; y < OLED_H; y++)
+            for (int x = 0; x < OLED_W; x++) begin
+                automatic int          rr = y / 8, cc = x / 8;
+                automatic logic [7:0]  ch = (cc < exp_txt[rr].len()) ? exp_txt[rr][cc] : 8'h20;
+                automatic logic [15:0] want = glyph[ch & 8'h7f][y % 8][x % 8] ? exp_fg[rr] : exp_bg[rr];
+                if (u_oled.fb[y][x] !== want) begin
+                    bad++;
+                    if (first_r < 0) begin first_r = rr; first_c = cc; end
+                    if (bad <= 3) $display("OLED MISMATCH pixel (%0d,%0d) cell r%0d c%0d '%s': got %04h, want %04h",
+                                           x, y, rr, cc, string'(ch), u_oled.fb[y][x], want);
+                end
+            end
+        u_oled.dump_ppm({FS_DIR, "/oled.ppm"});
+        $display("SUMMARY oled txt_wr=%0d col_wr=%0d bad_pixels=%0d (%s, picture %s/oled.ppm)",
+                 oled_txt_wrs, oled_col_wrs, bad, path, FS_DIR);
+        if (bad != 0) begin
+            $display("OLED MISMATCH: %0d / 6144 pixels wrong, first in cell r%0d c%0d", bad, first_r, first_c);
+            report("oled_frame");
+        end else begin
+            $display("OLED MATCH: rows 1-7 == %s", path);
+        end
+    endtask
 
     initial begin
         if (!$value$plusargs("MEM=%s", mem)) mem = DEFAULT_MEM;
@@ -267,6 +373,7 @@ module fpga_sys_tb;
             end
             if (errors == errors_before) $display("PANIC MATCH: 2 lines x %0d bytes", PANIC_LEN);
         end
+        if ($value$plusargs("EXPECT_OLED_FILE=%s", expect_oled_file)) check_oled(expect_oled_file);
         if (errors == 0) begin
             $display("FPGA_SYS PASS");
             $finish;

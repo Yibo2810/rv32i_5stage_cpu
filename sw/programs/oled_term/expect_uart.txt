@@ -1,0 +1,10 @@
+oled ready
+Hello
+abX c
+ Y ok
+0123456789AB Z
+line5
+line6
+line7
+hi
+bye

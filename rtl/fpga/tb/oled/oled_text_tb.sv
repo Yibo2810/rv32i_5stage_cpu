@@ -2,7 +2,7 @@
 // Unit test for oled_text: drive (row, col) directly and read back ch / fg / bg.
 //   make oled-text-test
 // Cases: reset -> blank cells; CPU writes chars and a row colour while running;
-// row 0 status bar for RUN / PASS / FAIL; panic rows 2..6 after halt (exact 12-char strings);
+// row 0 status bar for RUN / PASS / FAIL; panic rows 2..6 after a FAIL halt (a PASS halt keeps the CPU text) (exact 12-char strings);
 // ADR row red when bus_err; columns 12..15 written by the CPU are never shown (renderer
 // only asks 0..11, checked here by reading 0..11 only).
 module oled_text_tb;
@@ -84,18 +84,15 @@ module oled_text_tb;
         expect_row(7, "ABCDEFGHIJKL", RGB_WHITE, RGB_BLACK, "T2");
         expect_row(1, "............", RGB_WHITE, RGB_BLACK, "T2");
 
-        // T3 halt + PASS: status yellow, panic rows replace CPU text
+        // T3 halt + PASS: status yellow, the CPU text and row colours of T2 stay
         trap_cause_q = 4'h3; trap_pc_q = 32'h8000_0040; tohost = 32'h1;
         bus_err = 1'b0; bus_err_addr = 32'h0;
         halted = 1'b1; pass = 1'b1;
         expect_row(0, "PASS        ", RGB_BLACK, RGB_YELLOW, "T3");
-        expect_row(1, "            ", RGB_WHITE, RGB_BLACK, "T3");
-        expect_row(2, "CAUSE 3     ", RGB_WHITE, RGB_BLACK, "T3");
-        expect_row(3, "PC  80000040", RGB_WHITE, RGB_BLACK, "T3");
-        expect_row(4, "TOH 00000001", RGB_WHITE, RGB_BLACK, "T3");
-        expect_row(5, "BUS 0       ", RGB_WHITE, RGB_BLACK, "T3");
-        expect_row(6, "ADR 00000000", RGB_WHITE, RGB_BLACK, "T3");
-        expect_row(7, "            ", RGB_WHITE, RGB_BLACK, "T3");
+        expect_row(2, ".....Hi.....", RGB_YELLOW, RGB_BLACK, "T3");
+        expect_row(7, "ABCDEFGHIJKL", RGB_WHITE, RGB_BLACK, "T3");
+        for (int r = 3; r < 7; r++) expect_row(r, "............", RGB_WHITE, RGB_BLACK, "T3");
+        expect_row(1, "............", RGB_WHITE, RGB_BLACK, "T3");
 
         // T4 halt + FAIL with bus error: status red, ADR row red, hex digits a-f lowercase
         pass = 1'b0; trap_cause_q = 4'h2; trap_pc_q = 32'h8000_00ac;

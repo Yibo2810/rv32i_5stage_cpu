@@ -136,12 +136,15 @@ fs-build:
 UART_EXPECT = $(wildcard sw/programs/$(PROG)/expect_uart.txt)
 # sw/programs/<PROG>/uart_rx.txt, if present, is typed into uart_rxd (echo-paced) by fpga_sys_tb.
 UART_RX_IN  = $(wildcard sw/programs/$(PROG)/uart_rx.txt)
+# sw/programs/<PROG>/expect_oled.txt, if present, is the expected screen (rows 1-7) after a PASS halt.
+OLED_EXPECT = $(wildcard sw/programs/$(PROG)/expect_oled.txt)
 MAX_CYCLES ?= 200000
 
 c-run: fs-build
 	$(MAKE) -C sw PROG=$(PROG)
 	./$(FS_SIMV) +MEM=rtl/fpga/build/$(PROG).mem +MAX_CYCLES=$(MAX_CYCLES) \
 	$(if $(UART_EXPECT),+EXPECT_UART_FILE=$(UART_EXPECT)) $(if $(UART_RX_IN),+UART_RX_FILE=$(UART_RX_IN)) \
+	$(if $(OLED_EXPECT),+EXPECT_OLED_FILE=$(OLED_EXPECT)) \
 	$(ARGS) -l $(FS_BUILD_DIR)/run.log
 
 c-spike:
