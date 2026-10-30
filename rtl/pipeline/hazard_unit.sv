@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module hazard_unit
-import single_pkg::*;
+import core_pkg::*;
 import pipeline_pkg::*;(
   input logic        ifid_valid,
   input logic [4:0]  id_rs1_addr,

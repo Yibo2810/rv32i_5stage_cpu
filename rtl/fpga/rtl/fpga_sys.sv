@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module fpga_sys
-import single_pkg::*;
+import core_pkg::*;
 import peripherals::*;
 #(
     parameter logic [31:0] RESET_PC          = SOC_RESET_PC,
@@ -41,9 +41,16 @@ import peripherals::*;
     output logic oled_dc,
     output logic oled_res_n,
     output logic oled_vccen,
-    output logic oled_pmoden
+    output logic oled_pmoden,
+
+    // Loader
+    input  logic load_mode,
+    output logic loading,
+    output logic load_err
 );
     localparam int RAM_WORDS = 1 << (RAM_AW - 2);   // sys_ram depth = RAM region size / 4
+
+    logic        sys_rst;  // For load instruction
 
     logic        imem_req_valid;
     logic [31:0] imem_req_addr;
@@ -87,6 +94,24 @@ import peripherals::*;
     logic [31:0] ram_rsp_rdata;
     logic        ram_rsp_ready;
     logic        ram_rsp_valid;
+    // Load mode
+    logic        ld_wr_valid;
+    logic [31:0] ld_wr_addr;
+    logic [31:0] ld_wr_data;
+    logic [3:0]  ld_wr_strb;
+
+    logic        xbar_ram_req_valid;
+    logic        xbar_ram_req_write;
+    logic [31:0] xbar_ram_req_addr;
+    logic [31:0] xbar_ram_req_wdata;
+    logic [3:0]  xbar_ram_req_wstrb;
+
+    assign sys_rst = rst || loading;
+    assign ram_req_valid = loading ? ld_wr_valid : xbar_ram_req_valid;
+    assign ram_req_write = loading ? 1'b1        : xbar_ram_req_write;
+    assign ram_req_addr  = loading ? ld_wr_addr  : xbar_ram_req_addr;
+    assign ram_req_wdata = loading ? ld_wr_data  : xbar_ram_req_wdata;
+    assign ram_req_wstrb = loading ? ld_wr_strb : xbar_ram_req_wstrb;
     // Trap
     logic        trap_valid;
     exc_cause_e  trap_cause;
@@ -119,7 +144,7 @@ import peripherals::*;
     logic        dmem_rsp_err;
     assign error_trap = halted && trap_cause_q != EXC_BREAKPOINT;
     always_ff @( posedge clk ) begin
-        if (rst) begin
+        if (sys_rst) begin
             trap_cause_q <= exc_cause_e'(0); //only valid when halted
             trap_pc_q <= 32'h0;
         end else if (trap_valid) begin
@@ -129,7 +154,7 @@ import peripherals::*;
     end
     // see the store process on led
     always_ff @( posedge clk ) begin
-        if (rst) begin
+        if (sys_rst) begin
             mark_seen <= 1'b0;
         end else begin
             if (dmem_req_valid && dmem_req_ready && dmem_req_write) begin
@@ -143,7 +168,7 @@ import peripherals::*;
 
     core_5stage #(.RESET_PC(RESET_PC)) u_core (
         .clk           (clk),
-        .rst           (rst),
+        .rst           (sys_rst),
         .imem_req_valid(imem_req_valid),
         .imem_req_ready(imem_req_ready),
         .imem_req_addr (imem_req_addr),
@@ -167,7 +192,7 @@ import peripherals::*;
 
     sys_ram #(.DEPTH(RAM_WORDS), .INIT_FILE(RAM_INIT)) u_ram (
         .clk      (clk),
-        .rst      (rst),
+        .rst      (sys_rst),
         .req_valid(ram_req_valid),
         .req_ready(ram_req_ready),
         .req_write(ram_req_write),
@@ -187,13 +212,13 @@ import peripherals::*;
 
     dmem_xbar #(.RAM_BASE(RAM_BASE), .RAM_AW(RAM_AW), .MMIO_BASE(MMIO_BASE), .MMIO_AW(MMIO_AW)) u_xbar(
         .clk      (clk),
-        .rst      (rst),
-        .ram_req_valid(ram_req_valid),
+        .rst      (sys_rst),
+        .ram_req_valid(xbar_ram_req_valid),
+        .ram_req_write(xbar_ram_req_write),
+        .ram_req_addr (xbar_ram_req_addr),
+        .ram_req_wdata(xbar_ram_req_wdata),
+        .ram_req_wstrb(xbar_ram_req_wstrb),
         .ram_req_ready(ram_req_ready),
-        .ram_req_write(ram_req_write),
-        .ram_req_addr (ram_req_addr),
-        .ram_req_wdata(ram_req_wdata),
-        .ram_req_wstrb(ram_req_wstrb),
         .ram_rsp_valid(ram_rsp_valid),
         .ram_rsp_ready(ram_rsp_ready),
         .ram_rsp_rdata(ram_rsp_rdata),
@@ -222,7 +247,7 @@ import peripherals::*;
 
     mmio_regs u_mmio (
         .clk        (clk),
-        .rst        (rst),
+        .rst        (sys_rst),
         .req_valid  (mmio_req_valid),
         .req_ready  (mmio_req_ready),
         .req_write  (mmio_req_write),
@@ -253,7 +278,7 @@ import peripherals::*;
 
     halt_reporter #(.PERIOD(PANIC_PERIOD)) u_panic (
         .clk         (clk),
-        .rst         (rst),
+        .rst         (sys_rst),
         .halted      (halted),
         .trap_cause_q(trap_cause_q),
         .trap_pc_q   (trap_pc_q),
@@ -271,7 +296,7 @@ import peripherals::*;
 
     uart_tx #(.CLKS_PER_BIT(UART_CLKS_PER_BIT)) u_uart_tx (
         .clk(clk), 
-        .rst(rst),
+        .rst(sys_rst),
         .tx_valid(uart_tx_valid),
         .tx_data(uart_tx_data),
         .tx_busy(uart_tx_busy),
@@ -289,7 +314,7 @@ import peripherals::*;
 
     oled_ctrl #(.MS_CYCLES(OLED_MS_CYCLES)) u_ctrl (
         .clk(clk),
-        .rst(rst),
+        .rst(sys_rst),
         // Power-on sequence
         .oled_res_n (oled_res_n),
         .oled_vccen (oled_vccen),
@@ -314,5 +339,19 @@ import peripherals::*;
         .pass        (pass),
         .bus_err     (bus_err),
         .bus_err_addr(bus_err_addr)
+    );
+
+    uart_loader u_uart_loader(
+        .clk       (clk),
+        .rst       (rst),
+        .load_mode (load_mode),
+        .rx_valid  (uart_rx_valid),
+        .rx_data   (uart_rx_data),
+        .loading   (loading),
+        .load_err  (load_err),
+        .wr_valid  (ld_wr_valid),
+        .wr_addr   (ld_wr_addr),
+        .wr_data   (ld_wr_data),
+        .wr_strb   (ld_wr_strb)
     );
     endmodule

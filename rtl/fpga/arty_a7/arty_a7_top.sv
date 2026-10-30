@@ -2,7 +2,7 @@ module arty_a7_top (
     // Basic
     input logic clk_100mhz,
     input logic reset_n,
-    input logic [1:0] sw,
+    input logic [2:0] sw,
     output logic [3:0] led,
 
     // UART
@@ -45,8 +45,17 @@ module arty_a7_top (
     logic halted;
     logic pass;
     logic fail;
+    logic mark_seen;
+    logic error_trap;
     logic bus_err;
-
+    // loader
+    (* ASYNC_REG = "TRUE" *) logic load_mode;
+    logic loading;
+    logic load_err;
+    (* ASYNC_REG = "TRUE" *) logic load_mode_q;
+    assign led0_b = loading;
+    assign led0_r = load_err;
+    
     assign reset_async = !reset_n | !mmcm_locked;
     assign led1_b = bus_err;
 
@@ -70,11 +79,15 @@ module arty_a7_top (
     logic heartbeat;
     always_ff @(posedge clk_25mhz) begin
         if (rst) heartbeat_cnt <= '0;
-        else heartbeat_cnt <= heartbeat_cnt + 1'b1;
+        else begin
+            heartbeat_cnt <= heartbeat_cnt + 1'b1;
+            load_mode_q <= sw[2];
+            load_mode <= load_mode_q;
+        end
     end
     assign heartbeat = heartbeat_cnt[24]; // 25MHz f = 0.645Hz T = 1.34s
     always_comb begin
-        unique case (sw)
+        unique case (sw[1:0])
             2'b00: led = {
                 halted,
                 error_trap,
@@ -103,7 +116,7 @@ module arty_a7_top (
     assign timeout_blink = heartbeat_cnt[23];
     assign heartbeat_dim = (heartbeat_cnt[24:21] == 4'b0000);
     always_ff @(posedge clk_25mhz) begin
-        if (rst) begin
+        if (rst || loading) begin
             timeout_cnt <= '0;
             timeout     <= 1'b0;
         end else if (!halted && !timeout) begin
@@ -115,9 +128,7 @@ module arty_a7_top (
         end
     end
 
-    assign led0_r = 1'b0;
     assign led0_g = heartbeat_dim;
-    assign led0_b = 1'b0;
     assign led1_r = timeout ? timeout_blink : fail;
     assign led1_g = 1'b0;
 
@@ -163,6 +174,7 @@ module arty_a7_top (
         .mark_seen(mark_seen),
         .error_trap(error_trap),
         .bus_err(bus_err),
+        // UART
         .uart_txd(uart_rxd_out),
         .uart_rxd(uart_txd_in),
         // OLED
@@ -172,7 +184,11 @@ module arty_a7_top (
         .oled_mosi(oled_mosi),
         .oled_cs_n(oled_cs_n),
         .oled_sclk(oled_sclk),
-        .oled_pmoden(oled_pmoden)
+        .oled_pmoden(oled_pmoden),
+        // Loader
+        .load_mode(load_mode),
+        .loading(loading),  
+        .load_err(load_err)
     );
 
 endmodule

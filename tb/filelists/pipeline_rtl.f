@@ -1,16 +1,16 @@
 +incdir+rtl/include
 
 // ---- packages
-rtl/include/single_pkg.sv
+rtl/include/core_pkg.sv
 rtl/include/pipeline_pkg.sv
 
-// ---- shared leaf RTL
-rtl/single_cycle/pc.v
-rtl/single_cycle/alu.sv
-rtl/single_cycle/regfile.sv
-rtl/single_cycle/imm_gen.sv
-rtl/single_cycle/control_unit.sv
-rtl/single_cycle/load_store_unit.sv
+// ---- leaf units
+rtl/pipeline/units/pc.v
+rtl/pipeline/units/alu.sv
+rtl/pipeline/units/regfile.sv
+rtl/pipeline/units/imm_gen.sv
+rtl/pipeline/units/control_unit.sv
+rtl/pipeline/units/load_store_unit.sv
 
 // ---- pipeline RTL
 rtl/pipeline/pipeline_regs.sv
@@ -22,4 +22,3 @@ rtl/pipeline/wb_stage.sv
 rtl/pipeline/hazard_unit.sv
 rtl/pipeline/forwarding_unit.sv
 rtl/pipeline/core_5stage.sv
-rtl/pipeline/memory/dmem_bram.sv

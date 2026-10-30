@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module forwarding_unit 
-import single_pkg::*;
+import core_pkg::*;
 import pipeline_pkg::*;(
   input logic        idex_valid,
   input logic [4:0]  idex_rs1_addr,

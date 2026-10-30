@@ -1,6 +1,6 @@
 package pl_random_pkg;
     import pipeline_verif_pkg::*;
-    import single_pkg::*;
+    import core_pkg::*;
 
     typedef enum int {
         INSTR_ADD, INSTR_SUB, INSTR_AND, INSTR_OR, INSTR_XOR, INSTR_SLL,

@@ -10,9 +10,6 @@ sim/*.log
 urg.log
 
 
-# Generated program files
-programs/hex/*.bin
-programs/hex/*.elf
 
 # VCS build artifacts
 simv

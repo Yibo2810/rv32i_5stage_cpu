@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-interface pipeline_probe_if import single_pkg::*;(
+interface pipeline_probe_if import core_pkg::*;(
     input logic clk,
     input logic rst
 );

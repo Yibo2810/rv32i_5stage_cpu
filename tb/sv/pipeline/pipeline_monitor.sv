@@ -4,7 +4,7 @@ module pipeline_monitor (
     pipeline_probe_if.pipeline_monitor p
 );
     import pipeline_verif_pkg::*;
-    import single_pkg::*;
+    import core_pkg::*;
 
     int unsigned trap_count;
     exc_cause_e  trap_cause_q;

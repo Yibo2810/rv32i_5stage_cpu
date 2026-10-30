@@ -1,5 +1,5 @@
 module pipeline_sva_bind 
-import single_pkg::*; 
+import core_pkg::*;
 import pipeline_pkg::*; (
     input logic clk, rst,
     input logic [31:0] imem_req_addr, imem_rsp_rdata,

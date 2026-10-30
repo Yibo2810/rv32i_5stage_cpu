@@ -2,7 +2,7 @@
 
 module id_stage
 import pipeline_pkg::*;
-import single_pkg::*;(
+import core_pkg::*;(
   input logic clk,
   input logic rst,
 

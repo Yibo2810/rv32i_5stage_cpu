@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module core_5stage
-import single_pkg::*;
+import core_pkg::*;
 import pipeline_pkg::*;
 #(parameter logic [31:0] RESET_PC = 32'h0000_0000)(
   input  logic        clk,

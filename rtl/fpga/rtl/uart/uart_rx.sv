@@ -9,8 +9,7 @@ import peripherals::*;
     output logic frame_err
 );
     localparam int AW = $clog2(CLKS_PER_BIT);
-    logic rx_s;
-    logic rx_meta;
+    (* ASYNC_REG = "TRUE" *) logic rx_s, rx_meta;
     logic [AW-1:0] clk_cnt;
     logic [2:0] bit_idx;
     logic [7:0] shift;

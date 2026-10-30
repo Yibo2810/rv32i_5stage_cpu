@@ -1,5 +1,5 @@
 package pipeline_pkg;
-    import single_pkg::*;
+    import core_pkg::*;
 
     typedef struct packed {
         logic        valid;

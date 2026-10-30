@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module fpga_sys_tb;
-    import single_pkg::*;
+    import core_pkg::*;
 
     localparam string       DEFAULT_MEM = "rtl/fpga/build/mmap_test.mem";
     localparam int          SIM_CPB     = 8;      // UART clocks per bit in sim (board: 217)
@@ -30,6 +30,8 @@ module fpga_sys_tb;
     logic        uart_txd;
     logic        uart_rxd = 1'b1;   // PC -> FPGA line, idle high; driven by the sender below
     logic        oled_cs_n, oled_mosi, oled_sclk, oled_dc, oled_res_n, oled_vccen, oled_pmoden;
+    logic        load_mode = 1'b0;  // sw[2]: hold the core and take a program over UART (uart_loader)
+    logic        loading, load_err;
 
     // ---- TB variables
     string       mem;
@@ -43,6 +45,10 @@ module fpga_sys_tb;
     logic [31:0] expect_bus_err_addr; // +EXPECT_BUS_ERR_ADDR=, first unmapped address (checked only if given)
     int unsigned n_prog;            // UART bytes sent by the program, before the panic printer took over
     string       uart_rx_file;      // +UART_RX_FILE=, bytes the "PC" types into uart_rxd (trailing CR/LF dropped)
+    string       load_bin;          // +LOAD_BIN=, program sent over UART to uart_loader (load_mode = 1) instead of $readmemh
+    bit          load_corrupt;      // +LOAD_CORRUPT=1: one data byte is flipped on the line, the loader must end in ERR
+    bit          load_ok;
+    string       load_frame;        // +LOAD_FRAME=, exact bytes to send (tools/uart_load.py --out); default: built here
     int unsigned rx_sent    = 0;
     int unsigned rx_no_echo = 0;
     string       expect_oled_file;  // +EXPECT_OLED_FILE=, rows 1-7 after a PASS halt: "<fg hex4> <text>" per line
@@ -181,6 +187,65 @@ module fpga_sys_tb;
         #(RX_BIT_NS);
     endtask
 
+    // ---- sw[2] mode: the "PC" sends "RVLD" + len (LE) + image + byte sum (LE) on uart_rxd.
+    // With +LOAD_FRAME the bytes come from tools/uart_load.py --out, so the board and the
+    // simulation share one frame builder. RAM is filled with ebreak first, so a program
+    // that did not arrive over UART halts without writing tohost and fails.
+    task automatic load_over_uart(input string path, input bit corrupt, output bit ok);
+        logic [7:0]  img[$], frame[$];
+        logic [31:0] sum = 0;
+        int          fd, c, bad_words = 0, first_bad = -1;
+        int unsigned guard = 0;
+        ok = 1'b0;
+        fd = $fopen(path, "rb");
+        if (fd == 0) $fatal(1, "cannot open %s", path);
+        while ((c = $fgetc(fd)) != -1) img.push_back(8'(c));
+        $fclose(fd);
+        while (img.size() % 4 != 0) img.push_back(8'h00);
+        foreach (img[i]) sum += img[i];
+        if (load_frame != "") begin
+            fd = $fopen(load_frame, "rb");
+            if (fd == 0) $fatal(1, "cannot open %s", load_frame);
+            while ((c = $fgetc(fd)) != -1) frame.push_back(8'(c));
+            $fclose(fd);
+            if (frame.size() != img.size() + 12) $fatal(1, "%s: %0d bytes, want %0d", load_frame, frame.size(), img.size() + 12);
+        end else begin
+            frame = {8'h52, 8'h56, 8'h4C, 8'h44};
+            for (int k = 0; k < 4; k++) frame.push_back(8'(img.size() >> (8*k)));
+            foreach (img[i]) frame.push_back(img[i]);
+            for (int k = 0; k < 4; k++) frame.push_back(sum[8*k +: 8]);
+        end
+        if (corrupt) frame[8 + img.size() / 2] ^= 8'h01;
+        $display("LOAD sending %s: %0d bytes, sum %08h, frame from %s", path, img.size(), sum,
+                 load_frame != "" ? load_frame : "fpga_sys_tb");
+        if (corrupt) $display("LOAD byte %0d flipped on the line (bad checksum expected)", img.size() / 2);
+
+        foreach (frame[i]) uart_send_byte(frame[i]);
+        while (loading === 1'b1 && load_err !== 1'b1 && guard < 40 * SIM_CPB) begin
+            @(negedge clk);
+            guard++;
+        end
+        $display("SUMMARY load loading=%0b load_err=%0b state=%s", loading, load_err, u_sys.u_uart_loader.state.name());
+        if (corrupt) begin
+            ok = (load_err === 1'b1 && loading === 1'b1);
+            return;
+        end
+        if (loading !== 1'b0 || load_err !== 1'b0) return;
+        // the core left reset on the last clock edge: RAM must hold the image, word for word
+        for (int w = 0; w < img.size() / 4; w++)
+            if (u_sys.u_ram.mem[w] !== {img[4*w+3], img[4*w+2], img[4*w+1], img[4*w]}) begin
+                bad_words++;
+                if (first_bad < 0) first_bad = w;
+            end
+        if (bad_words != 0) begin
+            $display("LOAD MISMATCH: %0d / %0d RAM words differ from %s, first at word %0d: %08h",
+                     bad_words, img.size() / 4, path, first_bad, u_sys.u_ram.mem[first_bad]);
+            return;
+        end
+        $display("LOAD MATCH: RAM == %s (%0d words), core released", path, img.size() / 4);
+        ok = 1'b1;
+    endtask
+
     function automatic bit uart_seen_lf();
         foreach (u_rx.bytes[i]) if (u_rx.bytes[i] == 8'h0a) return 1'b1;
         return 1'b0;
@@ -305,8 +370,34 @@ module fpga_sys_tb;
         if (!$value$plusargs("MAX_CYCLES=%d", max_cycles)) max_cycles = 10_000;
 
         @(negedge clk);
-        load_program(mem);
-        apply_reset();
+        if ($value$plusargs("LOAD_BIN=%s", load_bin)) begin
+            if (!$value$plusargs("LOAD_CORRUPT=%d", load_corrupt)) load_corrupt = 1'b0;
+            if (!$value$plusargs("LOAD_FRAME=%s", load_frame)) load_frame = "";
+            mem = load_bin;
+            for (int i = 0; i < $size(u_sys.u_ram.mem); i++) u_sys.u_ram.mem[i] = 32'h0010_0073;   // ebreak
+            load_mode = 1'b1;                       // sw[2] on before reset is released
+            apply_reset();
+            load_over_uart(load_bin, load_corrupt, load_ok);
+            if (load_corrupt) begin
+                // negative test: the loader must refuse the frame and keep the core in reset
+                repeat (2000) @(negedge clk);
+                if (!load_ok) report("load_err_not_raised");
+                if (mark_seen || halted) report("core_ran_after_bad_load");
+                if (errors == 0) begin
+                    $display("LOAD ERR DETECTED: bad checksum -> load_err=1, core held in reset");
+                    $display("FPGA_SYS PASS");
+                    $finish;
+                end
+                $fatal(1, "FPGA_SYS FAIL: %0d check(s) failed", errors);
+            end
+            if (!load_ok) begin
+                report("load");
+                $fatal(1, "FPGA_SYS FAIL: program did not load over UART");
+            end
+        end else begin
+            load_program(mem);
+            apply_reset();
+        end
         run_until_halt(max_cycles, cycles, timeout);
         if (halted === 1'b1) begin
             wait_panic_start(n_prog);
@@ -403,7 +494,10 @@ module fpga_sys_tb;
         .oled_dc     (oled_dc),
         .oled_res_n  (oled_res_n),
         .oled_vccen  (oled_vccen),
-        .oled_pmoden (oled_pmoden)
+        .oled_pmoden (oled_pmoden),
+        .load_mode   (load_mode),
+        .loading     (loading),
+        .load_err    (load_err)
     );
 
     ssd1331_model u_oled (

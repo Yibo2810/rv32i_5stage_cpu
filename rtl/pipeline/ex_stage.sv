@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module ex_stage
-import single_pkg::*;
+import core_pkg::*;
 import pipeline_pkg::*;(
   input  idex_t       idex_q,
 

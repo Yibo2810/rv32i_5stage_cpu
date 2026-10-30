@@ -8,11 +8,10 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 ASM_DIR="${ASM_DIR:-$REPO_ROOT/programs/asm}"
-HEX_DIR="${HEX_DIR:-$REPO_ROOT/programs/hex}"
+HEX_DIR="${HEX_DIR:-$REPO_ROOT/rtl/fpga/build}"
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/sim/build/asm}"
-# Empty: hex is taken from the unlinked .o (text at 0, the core-TB flow).
-# Set (e.g. LINK_BASE=0x80000000): link with ld -Ttext, keep the .elf for Spike.
-LINK_BASE="${LINK_BASE:-}"
+# Text is linked at RESET_PC (ld -Ttext); the .elf is kept next to the .bin.
+LINK_BASE="${LINK_BASE:-0x80000000}"
 
 die() {
     echo "asm_to_hex.sh: $*" >&2
@@ -45,6 +44,7 @@ LD="${RISCV_LD:-$(find_riscv_tool ld || true)}"
 [ -n "$AS" ] || die "cannot find RISC-V assembler. Install a RISC-V ELF binutils/gcc toolchain, or set RISCV_PREFIX/RISCV_AS."
 [ -n "$OBJCOPY" ] || die "cannot find RISC-V objcopy. Install a RISC-V ELF binutils/gcc toolchain, or set RISCV_PREFIX/RISCV_OBJCOPY."
 [ -n "$OBJDUMP" ] || die "cannot find RISC-V objdump. Install a RISC-V ELF binutils/gcc toolchain, or set RISCV_PREFIX/RISCV_OBJDUMP."
+[ -n "$LD" ] || die "cannot find RISC-V ld. Set RISCV_PREFIX/RISCV_LD."
 command -v hexdump >/dev/null 2>&1 || die "cannot find hexdump."
 
 mkdir -p "$HEX_DIR" "$BUILD_DIR"
@@ -88,14 +88,10 @@ assemble_one() {
     preprocess_asm "$src" "$pp"
 
     "$AS" -march="$ARCH" -mabi="$ABI" -o "$obj" "$pp"
-    img=$obj
-    if [ -n "$LINK_BASE" ]; then
-        [ -n "$LD" ] || die "cannot find RISC-V ld (needed for LINK_BASE). Set RISCV_PREFIX/RISCV_LD."
-        img="$BUILD_DIR/$name.elf"
-        # -N: no page alignment. Without it the first LOAD segment (ELF header
-        # included) starts at LINK_BASE-0x1000, which Spike rejects.
-        "$LD" -m elf32lriscv -N --no-warn-rwx-segments -Ttext="$LINK_BASE" -e _start -o "$img" "$obj"
-    fi
+    img="$BUILD_DIR/$name.elf"
+    # -N: no page alignment. Without it the first LOAD segment (ELF header
+    # included) starts at LINK_BASE-0x1000, which Spike rejects.
+    "$LD" -m elf32lriscv -N --no-warn-rwx-segments -Ttext="$LINK_BASE" -e _start -o "$img" "$obj"
     "$OBJCOPY" -O binary -j .text "$img" "$bin"
     hexdump -v -e '1/4 "%08x\n"' "$bin" > "$hex"
     "$OBJDUMP" -d "$img" > "$dump"

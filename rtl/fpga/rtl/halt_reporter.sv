@@ -1,5 +1,6 @@
 `timescale 1ns/1ps
 module halt_reporter
+import core_pkg::*;
 import peripherals::*;
 #(
     parameter int PERIOD = 25_000_000

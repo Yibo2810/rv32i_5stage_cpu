@@ -1,7 +1,7 @@
 module pl_coverage (
     pipeline_probe_if.pipeline_monitor mem
 );
-    import single_pkg::*;
+    import core_pkg::*;
     import pipeline_pkg::*;
     import pl_random_pkg::*;
 

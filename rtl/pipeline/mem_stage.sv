@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module mem_stage 
-import single_pkg::*;
+import core_pkg::*;
 import pipeline_pkg::*;(
   input exmem_t      exmem_q,
   input logic [31:0] dmem_rsp_rdata,

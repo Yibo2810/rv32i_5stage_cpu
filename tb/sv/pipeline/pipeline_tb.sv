@@ -4,7 +4,7 @@ module pipeline_tb #(
     parameter logic [31:0] RESET_PC = 32'h8000_0000,
     parameter logic [31:0] DATA_BASE = 32'h8000_8000
 );
-    import single_pkg::*;
+    import core_pkg::*;
     import pipeline_verif_pkg::*;
     import pl_random_pkg::*;
 
